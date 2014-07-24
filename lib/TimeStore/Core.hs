@@ -11,6 +11,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module TimeStore.Core
 (
@@ -36,8 +37,6 @@ import qualified Pipes.Prelude as Pipes
 import Data.Word(Word64)
 import Control.Applicative
 import Foreign.Storable
-import Pipes
-import qualified Pipes.Prelude as Pipes
 import Foreign.Ptr
 import Data.Bits
 import Data.String(IsString)
@@ -56,21 +55,35 @@ import Control.Exception
 --
 -- This has the bonus of clearly enumerating the back-end interactions.
 class Store s where
+    type FetchFuture :: *
+    type SizeFuture :: *
+
     -- | Append to a series of buckets, each append is atomic
     append :: s -> NameSpace -> [(ObjectName,ByteString)] -> IO ()
 
     -- | Overwrite a series of buckets
     write :: s -> NameSpace -> [(ObjectName, ByteString)] -> IO ()
 
-    -- | Fetch the contents a series of buckets, Nothing if bucket does not
-    -- exist.
-    fetch :: s -> NameSpace -> [ObjectName] -> Producer (Maybe ByteString) IO ()
+    -- | Begin fetching the contents of a bucket
+    fetch :: s -> NameSpace -> ObjectName -> IO FetchFuture
 
-    fetchNow :: s -> NameSpace -> [ObjectName] -> IO [Maybe ByteString]
-    fetchNow s ns objs = Pipes.toListM (fetch s ns objs)
+    -- | Retrieve the contents of a FetchFuture, Nothing if the bucket didn't
+    -- exit
+    reifyFetch :: s -> FetchFuture -> IO (Maybe ByteString)
 
-    -- | Get the current size of a series of buckets
+    -- | Fetch a series of buckets in parallel
+    fetchs :: s -> NameSpace -> [ObjectName] -> IO [Maybe ByteString]
+    fetchs s ns objs = mapM (fetch s ns) objs >>= mapM (reifyFetch s)
+
+    -- | Begin getting the size of a bucket
+    size :: s -> NameSpace -> ObjectName -> IO SizeFuture
+
+    -- | Retrieve the size of a SizeFuture, Nothing if the bucket didn't exist.
+    reifySize :: s -> SizeFuture -> IO (Maybe Word64)
+
+    -- | Fetch a series of sizes in parallel
     sizes :: s -> NameSpace -> [ObjectName] -> IO [Maybe Word64]
+    sizes s ns objs = mapM (size s ns) objs >>= mapM (reifySize s)
 
     unsafeLock :: s -> NameSpace -> Int -> LockName -> IO a -> IO a
 
@@ -85,6 +98,7 @@ class Store s where
                     putStrLn "withLock: Aborting due to lock timeout"
                     raiseSignal sigABRT
                     error "withLock: highly improbable"
+
                 Right v -> return v
 
 -- | In order to recover from a possible deadlock, we request that any locks
@@ -126,7 +140,6 @@ newtype Bucket
 newtype LockName
     = LockName { unLockName :: ByteString }
   deriving (Eq, Ord, IsString, Show)
-
 
 newtype NameSpace
     = NameSpace { unNameSpace :: ByteString }

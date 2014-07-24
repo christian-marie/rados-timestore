@@ -74,6 +74,7 @@ groupMixed :: Index Simple
                Time)
 groupMixed s_idx e_idx input = go mempty mempty mempty 0 0 0
   where
+    -- Look through the input string, indexed by os.
     go !s_map !e_map !p_map !s_latest !e_latest !os
         | fromIntegral os >= S.length input =
             (s_map, e_map, p_map, s_latest, e_latest)

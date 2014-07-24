@@ -8,6 +8,7 @@
 --
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module TimeStore.Stores.Memory
 (
@@ -22,8 +23,8 @@ import Control.Concurrent hiding (yield)
 import Data.ByteString(ByteString)
 import Control.Monad
 import Data.Map.Strict(Map)
-import Pipes
 import qualified Data.Map.Strict as Map
+import Data.Word(Word64)
 import qualified Data.ByteString as S
 
 newtype Key = Key ByteString
@@ -39,17 +40,25 @@ memoryStore :: IO MemoryStore
 memoryStore = MemoryStore <$> newMVar mempty <*> newMVar mempty
 
 instance Store MemoryStore where
+    type FetchFuture = Maybe ByteString
+    type SizeFuture = Maybe Word64
+
     append = mergeWith (flip S.append)
+
     write = mergeWith const
-    fetch (MemoryStore objects _) ns obj_names =
-        forM_ obj_names $ \obj_name ->
-            lift (withMVar objects (return . Map.lookup (key ns obj_name)))
-            >>= yield
-    sizes (MemoryStore objects _) ns obj_names =
-        forM obj_names $ \obj_name ->
+
+    fetch (MemoryStore objects _) ns obj =
+        withMVar objects (return . Map.lookup (key ns obj))
+
+    reifyFetch _ = return
+
+    size (MemoryStore objects _) ns obj =
             withMVar objects $ \obj_map ->
                 return $ fromIntegral . S.length
-                         <$> Map.lookup (key ns obj_name) obj_map
+                         <$> Map.lookup (key ns obj) obj_map
+
+    reifySize _ = return
+
     unsafeLock s@(MemoryStore _ locks) ns x lock f = do
         got_it <- modifyMVar locks $ \ls ->
             if lock `elem` ls

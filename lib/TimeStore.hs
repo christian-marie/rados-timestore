@@ -59,7 +59,7 @@ writeEncoded s ns encoded =
         -- Same for extended objects, also build the builders here.
         let e_objs = traversed %~ buildExtended $ itoList e_writes
 
-        -, - Stick all our writes into one big list (types are now unified) and
+        -- Stick all our writes into one big list (types are now unified) and
         -- do them at once.
         append s ns $ (s_objs, e_objs) ^.. both . traversed
   where
@@ -86,7 +86,7 @@ writeEncoded s ns encoded =
 
 updateLatest :: Store s => s -> NameSpace -> Time -> Time -> IO ()
 updateLatest s ns (Time s_time) (Time e_time) = withLock s ns "latest_update" $ do
-    latests <- fetchNow s ns [simpleLatest, extendedLatest]
+    latests <- fetchs s ns [simpleLatest, extendedLatest]
     write s ns $ case latests of
         [Just s_bytes, Just e_bytes] ->
             mkWrite s_bytes s_time simpleLatest
@@ -105,7 +105,7 @@ updateLatest s ns (Time s_time) (Time e_time) = withLock s ns "latest_update" $ 
 
 getIndexes :: Store s => s -> NameSpace -> IO (Index Simple, Index Extended)
 getIndexes s ns = do
-    ixs <- fetchNow s ns ["simple_days", "extended_days"]
+    ixs <- fetchs s ns ["simple_days", "extended_days"]
     case ixs of
         [Just s_idx, Just e_idx] -> return (s_idx ^. index, e_idx ^. index)
         [Nothing, Nothing] -> error "Invalid origin" -- TODO: proper exception
