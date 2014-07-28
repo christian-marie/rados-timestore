@@ -29,7 +29,9 @@ import Data.Map.Strict (Map)
 import Data.Monoid
 import Data.Packer
 import Data.Word (Word64)
+import Data.Tagged
 import TimeStore.Core
+import TimeStore.NestedMap
 import TimeStore.Index
 
 -- | The data portion of extended points. For each entry into this write, there
@@ -41,7 +43,7 @@ newtype ExtendedWrite = ExtendedWrite { unExtendedWrite :: Builder }
 -- be pending a base offset for the extended counterparts. Once those offsets
 -- are calculated, they may be fed in as a map to extract adjusted pointers.
 data PointerWrite = PointerWrite Word64
-                                 (Word64 -> Map (Object Extended) Word64 -> Builder)
+                                 (Word64 -> Map (Epoch, Bucket) Word64 -> Builder)
 instance Monoid PointerWrite where
     PointerWrite len1 f `mappend` PointerWrite len2 g =
         PointerWrite (len1 + len2) (\len0 oss -> f len0 oss <> g len1 oss)
@@ -63,16 +65,16 @@ newtype SimpleWrite = SimpleWrite { unSimpleWrite :: Builder }
 -- This function probably does too much, but it is a trade-off between smaller
 -- functions and having to tag the extended bytes with times so that they can
 -- be indexed later.
-groupMixed :: Index Simple
-           -> Index Extended
+groupMixed :: Tagged Simple Index
+           -> Tagged Extended Index
            -> ByteString
            -- Holy tuples batman!
-           -> (Map (Object Simple) SimpleWrite,
-               Map (Object Extended) ExtendedWrite,
-               Map (Object Simple) PointerWrite,
-               Time,
-               Time)
-groupMixed s_idx e_idx input = go mempty mempty mempty 0 0 0
+           -> (NestedMap Epoch Bucket SimpleWrite,
+               NestedMap Epoch Bucket ExtendedWrite,
+               NestedMap Epoch Bucket PointerWrite,
+               Tagged Simple Time,
+               Tagged Extended Time)
+groupMixed s_idx e_idx input = go mempty mempty mempty (Tagged 0) (Tagged 0) 0
   where
     -- Look through the input string, indexed by os.
     go !s_map !e_map !p_map !s_latest !e_latest !os
@@ -80,13 +82,13 @@ groupMixed s_idx e_idx input = go mempty mempty mempty 0 0 0
             (s_map, e_map, p_map, s_latest, e_latest)
         | otherwise = do
             let Point addr t len = parsePointAt os input
-            let s_obj = indexLookup t addr s_idx
-            let !s_latest' = if t > s_latest then t else s_latest
+            let s_loc = locationLookup t addr s_idx
+            let !s_latest' = if t > untag s_latest then Tagged t else s_latest
 
             if addr `testBit` 0
                 -- This one is extended
                 then do
-                    let !e_latest' = if t > e_latest then t else e_latest
+                    let !e_latest' = if t > untag e_latest then Tagged t else e_latest
                     -- Our extended data is just after the Point, the length of
                     -- which is described in the point.
                     --
@@ -100,28 +102,28 @@ groupMixed s_idx e_idx input = go mempty mempty mempty 0 0 0
                                     else getBuilderAt (os + 24) len input
 
                     let e_wr = ExtendedWrite (word64LE len <> e_bytes)
-                    let e_obj = indexLookup t addr e_idx
-                    let e_map' = Map.insertWith (flip mappend) e_obj e_wr e_map
+                    let e_loc = locationLookup t addr e_idx
+                    let e_map' = Map.insertWith (flip mappend) e_loc e_wr e_map
                     -- This pointer will reference the extended write now.
-                    let f = PointerWrite (len + 8) (makePointer e_obj addr t)
+                    let f = PointerWrite (len + 8) (makePointer e_loc addr t)
                     -- Insert pointer closure into the pointer map (grouped by
                     -- the simple index). This will be merged with the simple
                     -- writes once the offset is calculated and passed in.
-                    let p_map' = Map.insertWith (flip mappend) s_obj f p_map'
+                    let p_map' = Map.insertWith (flip mappend) s_loc f p_map'
                     go s_map e_map' p_map' s_latest' e_latest' (os + 24 + len)
                 -- This one is simple
                 else do
                     let s_wr = SimpleWrite (getBuilderAt os 24 input)
                     -- Shortcut the mappend here so that we don't need to
                     -- concatenate many thousands of mempties.
-                    let s_map' = Map.insertWith' (flip mappend) s_obj s_wr s_map
+                    let s_map' = Map.insertWith (flip mappend) s_loc s_wr s_map
                     go s_map' e_map p_map s_latest' e_latest (os + 24)
 
-    makePointer :: Object Extended
+    makePointer :: Tagged Extended Location
                 -> Address
                 -> Time
                 -> Word64
-                -> Map (Object Extended) Word64
+                -> Map (Tagged Extended Location) Word64
                 -> Builder
     makePointer obj (Address addr) (Time time') base_os os_map =
         case Map.lookup obj os_map of

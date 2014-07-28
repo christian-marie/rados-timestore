@@ -8,11 +8,14 @@
 --
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module TimeStore.Index
 (
     Index(..),
     index,
+    locationLookup,
     indexLookup,
 ) where
 
@@ -21,22 +24,29 @@ import Data.List
 import qualified Data.Map as Map
 import Data.Map(Map)
 import Data.ByteString(ByteString)
+import Data.Tagged
 import Data.Packer
 import Data.Monoid
 import Data.Bits
 import TimeStore.Core
 import Control.Applicative
 
-newtype Index kind = Index { unIndex :: Map Epoch Bucket }
+newtype Index = Index { unIndex :: Map Epoch Bucket }
     deriving (Monoid, Eq)
 
-instance Show (Index a) where
+instance Nameable (Tagged Simple Index) where
+    name _ = "simple_days"
+
+instance Nameable (Tagged Extended Index) where
+    name _ = "extended_days"
+
+instance Show Index where
     show = intercalate "\n"
          . map (\(k,v) -> show k ++ "," ++ show v)
          . Map.toAscList
          . unIndex
 
-index :: Iso' ByteString (Index a)
+index :: Iso' ByteString Index
 index = iso byteStringToIndex indexToByteString
   where
     byteStringToIndex = 
@@ -49,14 +59,17 @@ index = iso byteStringToIndex indexToByteString
             flip itraverse_ m $ \(Epoch k) (Bucket v) ->
                 putWord64LE k >> putWord64LE v
 
-indexLookup :: Time -> Address -> Index a -> Object a
-indexLookup t (Address addr) ix = 
-    let ((epoch', Bucket max_bucket),_) = splitRemainder t ix
+locationLookup :: Time -> Address -> Index -> (Epoch, Bucket)
+locationLookup t (Address addr) ix = 
+    let (epoch', Bucket max_bucket) = indexLookup t ix
         bucket' = Bucket $ (addr `clearBit` 0) `mod` max_bucket
-    in Object epoch' bucket'
+    in (epoch', bucket')
+
+indexLookup :: Time -> Index -> (Epoch, Bucket)
+indexLookup t ix = fst (splitRemainder t ix)
 
 -- Return first and the remainder that is later than that.
-splitRemainder :: Time -> Index a -> ((Epoch, Bucket), Index a)
+splitRemainder :: Time -> Index -> ((Epoch, Bucket), Index)
 splitRemainder (Time t) (Index m) =
     let (left, middle, right) = Map.splitLookup (Epoch t) m
         first = case middle of
@@ -65,9 +78,3 @@ splitRemainder (Time t) (Index m) =
                         else Map.findMax left
             Nothing -> Map.findMax left
     in (first, Index right)
-
-lookupRange :: Time -> Time -> Index a -> [(Epoch, Bucket)]
-lookupRange start (Time end) dm =
-    let (first, (Index remainder)) = splitRemainder start dm
-        (rest,_) = Map.split (Epoch end) remainder
-    in first : Map.toList rest

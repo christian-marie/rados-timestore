@@ -21,7 +21,6 @@ library
   default-language:  Haskell2010
 
   exposed-modules:   TimeStore
-  other-modules:     TimeStore.Core
   build-depends:     base >=3 && <5,
                      bytestring,
                      packer,
@@ -30,6 +29,7 @@ library
                      vector,
                      lens,
                      unix,
+                     tagged,
                      containers,
                      rados-haskell >= 3.0.3
 

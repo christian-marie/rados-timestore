@@ -9,24 +9,30 @@
 
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module TimeStore
 (
     writeEncoded,
+    MemoryStore,
+    memoryStore,
 ) where
 
 import Control.Lens hiding (Index, index, Simple)
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (toLazyByteString)
 import Data.ByteString.Lazy (toStrict)
+import Data.Tagged
 import Data.Map.Strict (Map, unionWith)
 import Data.Maybe
+import Control.Applicative
 import Data.Monoid
 import Data.Word (Word64)
 import Data.Packer
 import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
+import TimeStore.Stores.Memory
 
 type Stream = ()
 
@@ -39,7 +45,8 @@ writeEncoded s ns encoded =
         let (s_writes, e_writes, p_writes,
              s_latest, e_latest) = groupMixed s_idx e_idx encoded
 
-        updateLatest s ns s_latest e_latest
+        -- Merge our latest with everyone's latest.
+        (s_latest', e_latest') <- updateLatest s ns s_latest e_latest
 
         -- We would like to batch up the request for offsets, so we convert a
         -- traversal over the indexes to a lens.
@@ -47,10 +54,10 @@ writeEncoded s ns encoded =
         -- unsafePartsOf is needed so that we can change the return type, it
         -- will explode only if the length of domain to getOffsets is
         -- different to the length of the codomain.
-        offsets <- unsafePartsOf (itraversed . withIndex) getOffsets e_writes
+        e_offsets <- unsafePartsOf (itraversed . withIndex) getOffsets e_writes
 
         -- Now adjust the offsets in the simple pointers.
-        let p_adjusted = traversed %~ applyOffsets offsets $ p_writes
+        let p_adjusted = traversed %~ applyOffsets e_offsets $ p_writes
         let s_union = unionWith mappend s_writes p_adjusted
 
         -- Convert our ObjectGroups to ObjectNames for unioned simple objects.
@@ -62,54 +69,106 @@ writeEncoded s ns encoded =
         -- Stick all our writes into one big list (types are now unified) and
         -- do them at once.
         append s ns $ (s_objs, e_objs) ^.. both . traversed
+
+
+        -- Now check the sizes of those buckets so that we can decide if we
+        -- want to trigger a rollover
+        s_offsets <- unsafePartsOf (itraversed . withIndex) getOffsets s_union
+
+        maybeRollover s ns s_offsets s_latest' s_idx 
+        maybeRollover s ns e_offsets e_latest' e_idx
   where
-    -- | Find the offsets of a batch of ExtendedWrites.
+    -- | Find the offsets of a batch of objects.
     --
     -- This must maintain the invariant that size of the domain equals the size
     -- of the codomain.
-    getOffsets :: [(Object Extended, ExtendedWrite)] -> IO [(Object Extended, Word64)]
+    getOffsets :: Nameable a => [(a, b)] -> IO [(a, Word64)]
     getOffsets xs = do
         let objs = map fst xs
         offsets <- sizes s ns (map name objs)
         return $ zip objs (map (fromMaybe 0) offsets)
 
-    applyOffsets :: Map (Object Extended) Word64 -> PointerWrite -> SimpleWrite
+    applyOffsets :: Map (Tagged Extended Location) Word64 -> PointerWrite -> SimpleWrite
     applyOffsets offsets (PointerWrite _ f) = SimpleWrite (f 0 offsets)
 
-    buildExtended :: (Object Extended, ExtendedWrite) -> (ObjectName, ByteString)
+    buildExtended :: (Tagged Extended Location, ExtendedWrite) -> (ObjectName, ByteString)
     buildExtended = bimap name
                           (toStrict . toLazyByteString . unExtendedWrite)
 
-    buildSimple :: (Object Simple, SimpleWrite) -> (ObjectName, ByteString)
+    buildSimple :: (Tagged Simple Location, SimpleWrite) -> (ObjectName, ByteString)
     buildSimple = bimap name
                         (toStrict . toLazyByteString . unSimpleWrite)
 
-updateLatest :: Store s => s -> NameSpace -> Time -> Time -> IO ()
-updateLatest s ns (Time s_time) (Time e_time) = withLock s ns "latest_update" $ do
+-- | Do a roll over on the supplied index if any of the buckets have become too
+-- large.
+maybeRollover :: forall a s. (Nameable (Tagged a Index), Store s)
+              => s
+              -> NameSpace
+              -> Map (Tagged a Location) Word64
+              -> Tagged a Time
+              -> Tagged a Index
+              -> IO ()
+maybeRollover s ns offsets (Tagged (Time latest)) idx = do
+    let idx_obj = name idx
+    let (epoch', Bucket buckets) = indexLookup maxBound (untag idx)
+    -- case ix 
+    undefined
+
+    append s ns [(idx_obj, build buckets)]
+  where
+    build buckets =
+        runPacking 16 (putWord64LE latest >> putWord64LE buckets)
+
+
+
+updateLatest :: Store s => s
+             -> NameSpace
+             -> Tagged Simple Time
+             -> Tagged Extended Time
+             -> IO (Tagged Simple Time, Tagged Extended Time)
+updateLatest s ns s_time e_time = withLock s ns "latest_update" $ do
     latests <- fetchs s ns [simpleLatest, extendedLatest]
-    write s ns $ case latests of
-        [Just s_bytes, Just e_bytes] ->
-            mkWrite s_bytes s_time simpleLatest
-            ++ mkWrite e_bytes e_time extendedLatest
-        [Nothing, Nothing] ->
+    let parsed = traversed . traversed %~ parse $ latests
+
+    case parsed of
+        [Just s_latest, Just e_latest] -> do
+            write s ns $ mkWrite s_latest s_time 
+                       ++ mkWrite e_latest e_time 
+            return (max' s_latest s_time, max' e_latest e_time)
+        [Nothing, Nothing] -> do
             -- First write
-            [(simpleLatest, pack s_time), (extendedLatest, pack e_time)]
+            write s ns $ [(simpleLatest, pack . unTime . untag $ s_time)
+                         ,(extendedLatest, pack . unTime . untag $ e_time)]
+            return (s_time, e_time)
         _ -> error "updateLatest: did not get both or no latest"
   where
-    mkWrite bytes t obj = if parse bytes < t then [(obj, pack t)] else []
+    max' :: Word64 -> Tagged a Time -> Tagged a Time
+    max' a (Tagged (Time b)) = Tagged . Time $ max a b 
+
+    mkWrite :: forall a. Nameable (LatestFile a)
+            => Word64 -> Tagged a Time -> [(ObjectName, ByteString)]
+    mkWrite latest (Tagged (Time t)) =
+        if latest < t
+            then [(name (undefined :: LatestFile a), pack t)]
+            else []
+
     pack x = runPacking 8 (putWord64LE x)
-    parse = either (const 0) id . tryUnpacking getWord64LE
+    parse = runUnpacking getWord64LE
     simpleLatest = "simple_latest"
     extendedLatest = "extended_latest"
 
-
-getIndexes :: Store s => s -> NameSpace -> IO (Index Simple, Index Extended)
+getIndexes :: Store s => s -> NameSpace -> IO (Tagged Simple Index, Tagged Extended Index)
 getIndexes s ns = do
-    ixs <- fetchs s ns ["simple_days", "extended_days"]
+    ixs <- fetchs s ns [name (undefined :: Tagged Simple Index)
+                       ,name (undefined :: Tagged Extended Index)]
     case ixs of
-        [Just s_idx, Just e_idx] -> return (s_idx ^. index, e_idx ^. index)
-        [Nothing, Nothing] -> error "Invalid origin" -- TODO: proper exception
-        _ -> error "getIndexes: did not get all indexes or no indexes"
+        [Just s_idx, Just e_idx] ->
+            return (Tagged (s_idx ^. index)
+                   ,Tagged (e_idx ^. index))
+        [Nothing, Nothing] ->
+            error "Invalid origin" -- TODO: proper exception
+        _ ->
+            error "getIndexes: did not get all indexes or no indexes"
 
 readAddrs :: Store s => s -> NameSpace -> [Address] -> IO Stream
 readAddrs = undefined

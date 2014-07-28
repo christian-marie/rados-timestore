@@ -11,14 +11,15 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module TimeStore.Core
 (
     Bucket(..),
     ObjectName(..),
     Nameable(..),
-    Object(..),
     LockName(..),
     Store(..),
     Point(..),
@@ -26,6 +27,7 @@ module TimeStore.Core
     Epoch(..),
     Address(..),
     Time(..),
+    LatestFile,
     Simple,
     Extended
 ) where
@@ -35,6 +37,7 @@ import Control.Concurrent.Async
 import Data.ByteString(ByteString)
 import qualified Pipes.Prelude as Pipes
 import Data.Word(Word64)
+import Data.Tagged
 import Control.Applicative
 import Foreign.Storable
 import Foreign.Ptr
@@ -108,7 +111,6 @@ class Store s where
 lockTimeout :: Int
 lockTimeout = 120 -- seconds
 
-
 -- | An ObjectName can be used to retrieve an object's data from the backend.
 -- It corresponds to a part of an object ID in ceph. The other part being the
 -- namespace.
@@ -119,18 +121,23 @@ class Nameable o where
 data Simple
 data Extended
 
--- | An Object a is used as an index (in the sense of Data.Map Object Simple).
-data Object a
-    = Object { epoch :: Epoch, bucket :: Bucket }
-  deriving (Eq, Ord)
+-- Uninhibited wrapper for finding the location of a latest file.
+data LatestFile a
+
+instance Nameable (LatestFile Simple) where
+    name _ = "simple_latest"
+
+instance Nameable (LatestFile Extended) where
+    name _ = "extended_latest"
+
 
 newtype ObjectName = ObjectName { unObjectName :: ByteString }
   deriving (IsString)
 
-instance Nameable (Object Simple) where
-    name = undefined
+instance Nameable (Tagged Simple (Epoch, Bucket)) where
+    name (Tagged (e,b)) = undefined
 
-instance Nameable (Object Extended) where
+instance Nameable (Tagged Extended (Epoch, Bucket)) where
     name = undefined
 
 newtype Bucket
