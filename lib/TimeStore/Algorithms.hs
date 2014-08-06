@@ -43,7 +43,7 @@ newtype ExtendedWrite = ExtendedWrite { unExtendedWrite :: Builder }
 
 instance Show ExtendedWrite where
     show =
-        ("ExtendedWrite: "++ ) .  L.unpack . toLazyByteString . unExtendedWrite
+        ("ExtendedWrite: "++ ) . show . L.unpack . toLazyByteString . unExtendedWrite
 
 instance Eq ExtendedWrite where
     (ExtendedWrite a) == (ExtendedWrite b) =
@@ -75,7 +75,7 @@ newtype SimpleWrite = SimpleWrite { unSimpleWrite :: Builder }
 
 instance Show SimpleWrite where
     show =
-        ("SimpleWrite: " ++) . L.unpack . toLazyByteString . unSimpleWrite
+        ("SimpleWrite: " ++) . show . L.unpack . toLazyByteString . unSimpleWrite
 
 instance Eq SimpleWrite where
     (SimpleWrite a) == (SimpleWrite b) =
@@ -136,7 +136,7 @@ groupMixed (Tagged s_idx) (Tagged e_idx) input = go mempty mempty mempty (Tagged
                     -- Insert pointer closure into the pointer map (grouped by
                     -- the simple index). This will be merged with the simple
                     -- writes once the offset is calculated and passed in.
-                    let p_map' = Map.insertWith (flip mappend) s_loc f p_map'
+                    let p_map' = Map.insertWith (flip mappend) s_loc f p_map
                     go s_map e_map' p_map' s_latest' e_latest' (os + 24 + len)
                 -- This one is simple
                 else do
