@@ -29,7 +29,9 @@ module TimeStore.Core
     Time(..),
     LatestFile,
     Simple,
-    Extended
+    Extended,
+    SimpleBucketLocation(..),
+    ExtendeBucketLocation(..)
 ) where
 
 import Control.Concurrent
@@ -121,8 +123,9 @@ class Nameable o where
 data Simple
 data Extended
 
--- Uninhibited wrapper for finding the location of a latest file.
+-- Uninhabited wrapper for finding the location of a latest file.
 data LatestFile a
+
 
 instance Nameable (LatestFile Simple) where
     name _ = "simple_latest"
@@ -131,13 +134,17 @@ instance Nameable (LatestFile Extended) where
     name _ = "extended_latest"
 
 
+
 newtype ObjectName = ObjectName { unObjectName :: ByteString }
   deriving (IsString)
 
-instance Nameable (Tagged Simple (Epoch, Bucket)) where
-    name (Tagged (e,b)) = undefined
+newtype SimpleBucketLocation = SimpleBucketLocation (Epoch,Bucket)
+newtype ExtendeBucketLocation = ExtendedBucketLocation (Epoch,Bucket)
 
-instance Nameable (Tagged Extended (Epoch, Bucket)) where
+instance Nameable SimpleBucketLocation where
+    name (SimpleBucketLocation (e,b)) = undefined
+
+instance Nameable ExtendeBucketLocation where
     name = undefined
 
 newtype Bucket

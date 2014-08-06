@@ -9,7 +9,7 @@
 
 {-# LANGUAGE BangPatterns               #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE NamedFieldPuns             #-}
 
 module TimeStore.Algorithms
 (
@@ -28,10 +28,9 @@ import qualified Data.Map as Map
 import Data.Map.Strict (Map)
 import Data.Monoid
 import Data.Packer
-import Data.Word (Word64)
 import Data.Tagged
+import Data.Word (Word64)
 import TimeStore.Core
-import TimeStore.NestedMap
 import TimeStore.Index
 
 -- | The data portion of extended points. For each entry into this write, there
@@ -48,7 +47,6 @@ instance Monoid PointerWrite where
     PointerWrite len1 f `mappend` PointerWrite len2 g =
         PointerWrite (len1 + len2) (\len0 oss -> f len0 oss <> g len1 oss)
     mempty = PointerWrite 0 (\_ _ -> mempty)
--- (PointerWrite 3 (\0 map -> "0") <> PointerWrite 5 (\3 map -> "3") <> PointerWrite 1 (\map -> "8") map 0
 
 -- | A SimpleWrite is what we want to optimize for. Most writes will be simple.
 newtype SimpleWrite = SimpleWrite { unSimpleWrite :: Builder }
@@ -69,12 +67,12 @@ groupMixed :: Tagged Simple Index
            -> Tagged Extended Index
            -> ByteString
            -- Holy tuples batman!
-           -> (NestedMap Epoch Bucket SimpleWrite,
-               NestedMap Epoch Bucket ExtendedWrite,
-               NestedMap Epoch Bucket PointerWrite,
+           -> (Map (Epoch,Bucket) SimpleWrite,
+               Map (Epoch,Bucket) ExtendedWrite,
+               Map (Epoch,Bucket) PointerWrite,
                Tagged Simple Time,
                Tagged Extended Time)
-groupMixed s_idx e_idx input = go mempty mempty mempty (Tagged 0) (Tagged 0) 0
+groupMixed (Tagged s_idx) (Tagged e_idx) input = go mempty mempty mempty (Tagged 0) (Tagged 0) 0
   where
     -- Look through the input string, indexed by os.
     go !s_map !e_map !p_map !s_latest !e_latest !os
@@ -119,11 +117,11 @@ groupMixed s_idx e_idx input = go mempty mempty mempty (Tagged 0) (Tagged 0) 0
                     let s_map' = Map.insertWith (flip mappend) s_loc s_wr s_map
                     go s_map' e_map p_map s_latest' e_latest (os + 24)
 
-    makePointer :: Tagged Extended Location
+    makePointer :: (Epoch,Bucket)
                 -> Address
                 -> Time
                 -> Word64
-                -> Map (Tagged Extended Location) Word64
+                -> Map (Epoch,Bucket) Word64
                 -> Builder
     makePointer obj (Address addr) (Time time') base_os os_map =
         case Map.lookup obj os_map of

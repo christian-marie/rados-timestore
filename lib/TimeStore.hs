@@ -54,7 +54,7 @@ writeEncoded s ns encoded =
         -- unsafePartsOf is needed so that we can change the return type, it
         -- will explode only if the length of domain to getOffsets is
         -- different to the length of the codomain.
-        e_offsets <- unsafePartsOf (itraversed . withIndex) getOffsets e_writes
+        e_offsets <- unsafePartsOf (itraversed . withIndex) (getOffsets SimpleBucketLocation) e_writes
 
         -- Now adjust the offsets in the simple pointers.
         let p_adjusted = traversed %~ applyOffsets e_offsets $ p_writes
@@ -73,7 +73,7 @@ writeEncoded s ns encoded =
 
         -- Now check the sizes of those buckets so that we can decide if we
         -- want to trigger a rollover
-        s_offsets <- unsafePartsOf (itraversed . withIndex) getOffsets s_union
+        s_offsets <- unsafePartsOf (itraversed . withIndex) (getOffsets ExtendedBucketLocation) s_union
 
         maybeRollover s ns s_offsets s_latest' s_idx 
         maybeRollover s ns e_offsets e_latest' e_idx
@@ -82,21 +82,21 @@ writeEncoded s ns encoded =
     --
     -- This must maintain the invariant that size of the domain equals the size
     -- of the codomain.
-    getOffsets :: Nameable a => [(a, b)] -> IO [(a, Word64)]
-    getOffsets xs = do
+    getOffsets :: Nameable n => (a -> n) -> [(a, b)] -> IO [(a, Word64)]
+    getOffsets naming_f xs = do
         let objs = map fst xs
-        offsets <- sizes s ns (map name objs)
+        offsets <- sizes s ns (map (name . naming_f) objs)
         return $ zip objs (map (fromMaybe 0) offsets)
 
-    applyOffsets :: Map (Tagged Extended Location) Word64 -> PointerWrite -> SimpleWrite
+    applyOffsets :: Map (Epoch,Bucket) Word64 -> PointerWrite -> SimpleWrite
     applyOffsets offsets (PointerWrite _ f) = SimpleWrite (f 0 offsets)
 
-    buildExtended :: (Tagged Extended Location, ExtendedWrite) -> (ObjectName, ByteString)
-    buildExtended = bimap name
+    buildExtended :: ((Epoch,Bucket), ExtendedWrite) -> (ObjectName, ByteString)
+    buildExtended = bimap (name . ExtendedBucketLocation)
                           (toStrict . toLazyByteString . unExtendedWrite)
 
-    buildSimple :: (Tagged Simple Location, SimpleWrite) -> (ObjectName, ByteString)
-    buildSimple = bimap name
+    buildSimple :: ((Epoch, Bucket), SimpleWrite) -> (ObjectName, ByteString)
+    buildSimple = bimap (name . SimpleBucketLocation)
                         (toStrict . toLazyByteString . unSimpleWrite)
 
 -- | Do a roll over on the supplied index if any of the buckets have become too
@@ -104,7 +104,7 @@ writeEncoded s ns encoded =
 maybeRollover :: forall a s. (Nameable (Tagged a Index), Store s)
               => s
               -> NameSpace
-              -> Map (Tagged a Location) Word64
+              -> Map (Epoch,Bucket) Word64
               -> Tagged a Time
               -> Tagged a Index
               -> IO ()
