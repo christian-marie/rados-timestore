@@ -1,7 +1,7 @@
 cabal-version:       >= 1.10
-name:                vaultaire
+name:                rados-timestore
 version:             2.0.2
-synopsis:            Data vault for metrics
+synopsis:            Time series data store, backed by Ceph
 license:             BSD3
 author:              Anchor Engineering <engineering@anchor.com.au>
 maintainer:          Anchor Engineering <engineering@anchor.com.au>
@@ -14,7 +14,7 @@ build-type:          Simple
 
 source-repository    head
   type:              git
-  location:          git@github.com:anchor/vaultaire.git
+  location:          git@github.com:anchor/rados-timestore.git
 
 library
   hs-source-dirs:    lib
