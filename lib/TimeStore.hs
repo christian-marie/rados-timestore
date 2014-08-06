@@ -24,6 +24,7 @@ import Data.ByteString.Builder (toLazyByteString)
 import Data.ByteString.Lazy (toStrict)
 import Data.Tagged
 import Data.Map.Strict (Map, unionWith)
+import Control.Monad
 import Data.Maybe
 import Control.Applicative
 import Data.Monoid
@@ -37,8 +38,8 @@ import TimeStore.Stores.Memory
 type Stream = ()
 
 -- | Write a mixed blob of points to the supplied store and namespace.
-writeEncoded:: Store s => s -> NameSpace -> ByteString -> IO ()
-writeEncoded s ns encoded =
+writeEncoded:: Store s => s -> NameSpace -> Word64 -> ByteString -> IO ()
+writeEncoded s ns bucket_threshold encoded =
     withLock s ns "write_lock" $ do
         -- Group our writes using the latest indexes
         (s_idx, e_idx) <- getIndexes s ns
@@ -75,8 +76,8 @@ writeEncoded s ns encoded =
         -- want to trigger a rollover
         s_offsets <- unsafePartsOf (itraversed . withIndex) (getOffsets ExtendedBucketLocation) s_union
 
-        maybeRollover s ns s_offsets s_latest' s_idx 
-        maybeRollover s ns e_offsets e_latest' e_idx
+        maybeRollover s ns bucket_threshold s_offsets s_latest' s_idx 
+        maybeRollover s ns bucket_threshold e_offsets e_latest' e_idx
   where
     -- | Find the offsets of a batch of objects.
     --
@@ -104,22 +105,23 @@ writeEncoded s ns encoded =
 maybeRollover :: forall a s. (Nameable (Tagged a Index), Store s)
               => s
               -> NameSpace
+              -> Word64
               -> Map (Epoch,Bucket) Word64
               -> Tagged a Time
               -> Tagged a Index
               -> IO ()
-maybeRollover s ns offsets (Tagged (Time latest)) idx = do
-    let idx_obj = name idx
+maybeRollover s ns bucket_threshold offsets (Tagged (Time latest)) idx = do
     let (epoch', Bucket buckets) = indexLookup maxBound (untag idx)
-    -- case ix 
-    undefined
-
-    append s ns [(idx_obj, build buckets)]
+    let wr_fld = maximumOf (ifolded . indices ((== epoch') . fst)) offsets
+    case wr_fld of
+        Just max_wr ->
+            when (max_wr > bucket_threshold)
+                 (append s ns [(name idx, build buckets)])
+        _ ->
+            return ()
   where
     build buckets =
         runPacking 16 (putWord64LE latest >> putWord64LE buckets)
-
-
 
 updateLatest :: Store s => s
              -> NameSpace

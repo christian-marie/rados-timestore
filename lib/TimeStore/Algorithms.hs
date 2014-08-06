@@ -23,7 +23,8 @@ import Control.Applicative
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
-import Data.ByteString.Builder (Builder, byteString, word64LE)
+import qualified Data.ByteString.Lazy.Char8 as L
+import Data.ByteString.Builder (toLazyByteString, Builder, byteString, word64LE)
 import qualified Data.Map as Map
 import Data.Map.Strict (Map)
 import Data.Monoid
@@ -32,11 +33,20 @@ import Data.Tagged
 import Data.Word (Word64)
 import TimeStore.Core
 import TimeStore.Index
+import Data.String(IsString)
 
 -- | The data portion of extended points. For each entry into this write, there
 -- will be a corresponding pointer from a SimpleWrite.
 newtype ExtendedWrite = ExtendedWrite { unExtendedWrite :: Builder }
-  deriving Monoid
+  deriving (Monoid, IsString)
+
+instance Show ExtendedWrite where
+    show =  
+        ("ExtendedWrite: "++ ) .  L.unpack . toLazyByteString . unExtendedWrite
+
+instance Eq ExtendedWrite where
+    (ExtendedWrite a) == (ExtendedWrite b) =
+        toLazyByteString a == toLazyByteString b
 
 -- | Intially any extended pointers within the simple portion of a write will
 -- be pending a base offset for the extended counterparts. Once those offsets
@@ -48,9 +58,27 @@ instance Monoid PointerWrite where
         PointerWrite (len1 + len2) (\len0 oss -> f len0 oss <> g len1 oss)
     mempty = PointerWrite 0 (\_ _ -> mempty)
 
+-- We can only show the current offset, as the pointers are waiting for an
+-- offset map, which we don't have yet.
+instance Show PointerWrite where
+    show (PointerWrite os _) =
+        "PointerWrite (current offset: " ++ show os ++ ")"
+
+instance Eq PointerWrite where
+    (PointerWrite os _) == (PointerWrite os' _) =
+        os == os'
+
 -- | A SimpleWrite is what we want to optimize for. Most writes will be simple.
 newtype SimpleWrite = SimpleWrite { unSimpleWrite :: Builder }
-  deriving Monoid
+  deriving (Monoid, IsString)
+
+instance Show SimpleWrite where
+    show =
+        ("SimpleWrite: " ++) . L.unpack . toLazyByteString . unSimpleWrite
+
+instance Eq SimpleWrite where
+    (SimpleWrite a) == (SimpleWrite b) =
+        toLazyByteString a == toLazyByteString b
 
 -- | Take a blob of mixed (simple and extended) points and split them into two
 -- parts, indexed by the provided index. We also return the latest time seen
@@ -80,7 +108,7 @@ groupMixed (Tagged s_idx) (Tagged e_idx) input = go mempty mempty mempty (Tagged
             (s_map, e_map, p_map, s_latest, e_latest)
         | otherwise = do
             let Point addr t len = parsePointAt os input
-            let s_loc = locationLookup t addr s_idx
+            let !s_loc = locationLookup t addr s_idx
             let !s_latest' = if t > untag s_latest then Tagged t else s_latest
 
             if addr `testBit` 0

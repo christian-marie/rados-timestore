@@ -10,6 +10,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module TimeStore.Index
 (
@@ -30,9 +32,15 @@ import Data.Monoid
 import Data.Bits
 import TimeStore.Core
 import Control.Applicative
+import GHC.Exts (IsList (..))
 
 newtype Index = Index { unIndex :: Map Epoch Bucket }
     deriving (Monoid, Eq)
+
+instance IsList Index where
+    type Item Index = (Epoch, Bucket)
+    fromList = Index . Map.fromList
+    toList = Map.toList . unIndex
 
 instance Nameable (Tagged Simple Index) where
     name _ = "simple_days"
