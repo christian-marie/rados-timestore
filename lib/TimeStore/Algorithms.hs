@@ -23,17 +23,18 @@ import Control.Applicative
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
+import Data.ByteString.Builder (Builder, byteString, toLazyByteString,
+                                word64LE)
 import qualified Data.ByteString.Lazy.Char8 as L
-import Data.ByteString.Builder (toLazyByteString, Builder, byteString, word64LE)
 import qualified Data.Map as Map
 import Data.Map.Strict (Map)
 import Data.Monoid
 import Data.Packer
+import Data.String (IsString)
 import Data.Tagged
 import Data.Word (Word64)
 import TimeStore.Core
 import TimeStore.Index
-import Data.String(IsString)
 
 -- | The data portion of extended points. For each entry into this write, there
 -- will be a corresponding pointer from a SimpleWrite.
@@ -41,7 +42,7 @@ newtype ExtendedWrite = ExtendedWrite { unExtendedWrite :: Builder }
   deriving (Monoid, IsString)
 
 instance Show ExtendedWrite where
-    show =  
+    show =
         ("ExtendedWrite: "++ ) .  L.unpack . toLazyByteString . unExtendedWrite
 
 instance Eq ExtendedWrite where

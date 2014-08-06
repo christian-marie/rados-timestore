@@ -7,8 +7,8 @@
 -- the 3-clause BSD licence.
 --
 
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module TimeStore
@@ -18,18 +18,18 @@ module TimeStore
     memoryStore,
 ) where
 
-import Control.Lens hiding (Index, index, Simple)
+import Control.Applicative
+import Control.Lens hiding (Index, Simple, index)
+import Control.Monad
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (toLazyByteString)
 import Data.ByteString.Lazy (toStrict)
-import Data.Tagged
 import Data.Map.Strict (Map, unionWith)
-import Control.Monad
 import Data.Maybe
-import Control.Applicative
 import Data.Monoid
-import Data.Word (Word64)
 import Data.Packer
+import Data.Tagged
+import Data.Word (Word64)
 import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
@@ -76,7 +76,7 @@ writeEncoded s ns bucket_threshold encoded =
         -- want to trigger a rollover
         s_offsets <- unsafePartsOf (itraversed . withIndex) (getOffsets ExtendedBucketLocation) s_union
 
-        maybeRollover s ns bucket_threshold s_offsets s_latest' s_idx 
+        maybeRollover s ns bucket_threshold s_offsets s_latest' s_idx
         maybeRollover s ns bucket_threshold e_offsets e_latest' e_idx
   where
     -- | Find the offsets of a batch of objects.
@@ -134,8 +134,8 @@ updateLatest s ns s_time e_time = withLock s ns "latest_update" $ do
 
     case parsed of
         [Just s_latest, Just e_latest] -> do
-            write s ns $ mkWrite s_latest s_time 
-                       ++ mkWrite e_latest e_time 
+            write s ns $ mkWrite s_latest s_time
+                       ++ mkWrite e_latest e_time
             return (max' s_latest s_time, max' e_latest e_time)
         [Nothing, Nothing] -> do
             -- First write
@@ -145,7 +145,7 @@ updateLatest s ns s_time e_time = withLock s ns "latest_update" $ do
         _ -> error "updateLatest: did not get both or no latest"
   where
     max' :: Word64 -> Tagged a Time -> Tagged a Time
-    max' a (Tagged (Time b)) = Tagged . Time $ max a b 
+    max' a (Tagged (Time b)) = Tagged . Time $ max a b
 
     mkWrite :: forall a. Nameable (LatestFile a)
             => Word64 -> Tagged a Time -> [(ObjectName, ByteString)]

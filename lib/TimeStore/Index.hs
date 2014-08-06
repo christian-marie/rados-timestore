@@ -7,11 +7,11 @@
 -- the 3-clause BSD licence.
 --
 
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverloadedLists            #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE TypeFamilies               #-}
 
 module TimeStore.Index
 (
@@ -21,18 +21,18 @@ module TimeStore.Index
     indexLookup,
 ) where
 
-import Control.Lens (Iso', iso, itraverse_)
-import Data.List
-import qualified Data.Map as Map
-import Data.Map(Map)
-import Data.ByteString(ByteString)
-import Data.Tagged
-import Data.Packer
-import Data.Monoid
-import Data.Bits
-import TimeStore.Core
 import Control.Applicative
+import Control.Lens (Iso', iso, itraverse_)
+import Data.Bits
+import Data.ByteString (ByteString)
+import Data.List
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Monoid
+import Data.Packer
+import Data.Tagged
 import GHC.Exts (IsList (..))
+import TimeStore.Core
 
 newtype Index = Index { unIndex :: Map Epoch Bucket }
     deriving (Monoid, Eq)
@@ -57,7 +57,7 @@ instance Show Index where
 index :: Iso' ByteString Index
 index = iso byteStringToIndex indexToByteString
   where
-    byteStringToIndex = 
+    byteStringToIndex =
         let parse = many $ (,) <$> (Epoch <$> getWord64LE)
                                <*> (Bucket <$> getWord64LE)
         in Index . Map.fromList . runUnpacking parse
@@ -68,7 +68,7 @@ index = iso byteStringToIndex indexToByteString
                 putWord64LE k >> putWord64LE v
 
 locationLookup :: Time -> Address -> Index -> (Epoch, Bucket)
-locationLookup t (Address addr) ix = 
+locationLookup t (Address addr) ix =
     let (epoch', Bucket max_bucket) = indexLookup t ix
         bucket' = Bucket $ (addr `clearBit` 0) `mod` max_bucket
     in (epoch', bucket')

@@ -7,13 +7,12 @@
 -- the 3-clause BSD licence.
 --
 
+{-# LANGUAGE EmptyDataDecls             #-}
+{-# LANGUAGE ExistentialQuantification  #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE TypeFamilies               #-}
 
 module TimeStore.Core
 (
@@ -34,19 +33,19 @@ module TimeStore.Core
     ExtendeBucketLocation(..)
 ) where
 
+import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Async
-import Data.ByteString(ByteString)
-import qualified Pipes.Prelude as Pipes
-import Data.Word(Word64)
-import Data.Tagged
-import Control.Applicative
-import Foreign.Storable
-import Foreign.Ptr
-import Data.Bits
-import Data.String(IsString)
-import System.Posix.Signals
 import Control.Exception
+import Data.Bits
+import Data.ByteString (ByteString)
+import Data.String (IsString)
+import Data.Tagged
+import Data.Word (Word64)
+import Foreign.Ptr
+import Foreign.Storable
+import qualified Pipes.Prelude as Pipes
+import System.Posix.Signals
 
 -- | A concrete implementation of a storage backend for a time store.
 --

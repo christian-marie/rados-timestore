@@ -8,7 +8,7 @@
 --
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies               #-}
 
 module TimeStore.Stores.Memory
 (
@@ -16,16 +16,16 @@ module TimeStore.Stores.Memory
     memoryStore,
 ) where
 
-import TimeStore.Core
 import Control.Applicative
-import Data.Monoid
 import Control.Concurrent hiding (yield)
-import Data.ByteString(ByteString)
 import Control.Monad
-import Data.Map.Strict(Map)
-import qualified Data.Map.Strict as Map
-import Data.Word(Word64)
+import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import Data.Monoid
+import Data.Word (Word64)
+import TimeStore.Core
 
 newtype Key = Key ByteString
   deriving (Eq, Ord)
@@ -70,14 +70,14 @@ instance Store MemoryStore where
                 modifyMVar_ locks (return . filter (/= lock))
                 return r
             else unsafeLock s ns x lock f
-        
+
 
 mergeWith :: (ByteString -> ByteString -> ByteString)
           -> MemoryStore
           -> NameSpace
           -> [(ObjectName, ByteString)]
           -> IO ()
-mergeWith f (MemoryStore objects _) ns appends = 
+mergeWith f (MemoryStore objects _) ns appends =
         forM_ appends $ \(obj_name, bytes) ->
-            modifyMVar_ objects $ 
+            modifyMVar_ objects $
                 return . Map.insertWith f (key ns obj_name) bytes
