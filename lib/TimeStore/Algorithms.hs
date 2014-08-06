@@ -54,6 +54,7 @@ instance Eq ExtendedWrite where
 -- are calculated, they may be fed in as a map to extract adjusted pointers.
 data PointerWrite = PointerWrite Word64
                                  (Word64 -> Map (Epoch, Bucket) Word64 -> Builder)
+
 instance Monoid PointerWrite where
     PointerWrite len1 f `mappend` PointerWrite len2 g =
         PointerWrite (len1 + len2) (\len0 oss -> f len0 oss <> g len1 oss)
