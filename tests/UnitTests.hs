@@ -37,17 +37,17 @@ groupSimpleOnly =
                 , Map (Epoch, Bucket) PointerWrite
                 , Tagged Simple Time                   -- Latest simple write
                 , Tagged Extended Time)                -- Latest extended write
-    expected = ( Map.fromList [((0,0) :: (Epoch, Bucket), bucket0)
-                              ,((0,2)                   , bucket2)
+    expected = ( Map.fromList [ ((0,0), bucket0_0) :: ((Epoch, Bucket), SimpleWrite)
+                              , ((0,2), bucket0_2)
+                              , ((6,8), bucket6_8)
                               ]
                , mempty
                , mempty
-               , 4
+               , 8
                , 0
                )
 
-    bucket0 :: SimpleWrite
-    bucket0 = fromString . concat $
+    bucket0_0 = fromString . concat $
         [ "\x00\x00\x00\x00\x00\x00\x00\x00" -- Point 0 0 0
         , "\x00\x00\x00\x00\x00\x00\x00\x00"
         , "\x00\x00\x00\x00\x00\x00\x00\x00"
@@ -56,18 +56,25 @@ groupSimpleOnly =
         , "\x04\x00\x00\x00\x00\x00\x00\x00"
         ]
 
-    bucket2 :: SimpleWrite
-    bucket2 = fromString . concat $
-        [ "\x02\x00\x00\x00\x00\x00\x00\x00" -- Point 4 4 4
+    bucket0_2 = fromString . concat $
+        [ "\x02\x00\x00\x00\x00\x00\x00\x00" -- Point 2 2 2
         , "\x02\x00\x00\x00\x00\x00\x00\x00"
         , "\x02\x00\x00\x00\x00\x00\x00\x00"
         ]
 
+    bucket6_8 = fromString . concat $
+        [ "\x08\x00\x00\x00\x00\x00\x00\x00" -- Point 8 8 8
+        , "\x08\x00\x00\x00\x00\x00\x00\x00"
+        , "\x08\x00\x00\x00\x00\x00\x00\x00"
+        ]
+
 simplePoints :: ByteString
-simplePoints = vectorToByteString [Point 0 0 0, Point 2 2 2, Point 4 4 4]
+simplePoints = vectorToByteString [Point 0 0 0, Point 2 2 2, Point 4 4 4, Point 8 8 8]
 
 simpleIndex :: Tagged Simple Index
-simpleIndex = Tagged [(0 :: Epoch, 4 :: Bucket)]
+simpleIndex = Tagged [ (0, 4) :: (Epoch, Bucket)
+                     , (6, 10)
+                     ]
 
 extendedIndex :: Tagged Extended Index
 extendedIndex = Tagged [(0 :: Epoch, 3 :: Bucket)]
