@@ -47,14 +47,21 @@ isRegistered s ns = isJust <$> fetchIndexes s ns
 
 -- | Register a namespace with the given number of buckets. This is idempotent,
 -- however on subsequent runs the bucket argument will be ignored.
-registerNamespace :: Store s => s -> NameSpace -> Word64 -> IO ()
-registerNamespace s ns buckets = do
+registerNamespace :: Store s
+                  => s
+                  -> NameSpace
+                  -> Word64
+                  -- ^ Number of simple buckets to distribute over
+                  -> Word64
+                  -- ^ Number of extended buckets to distribute over
+                  -> IO ()
+registerNamespace s ns s_buckets e_buckets = do
     registered <- isRegistered s ns
     unless registered $
         append s ns [ ( name (undefined :: Tagged Simple Index)
-                      , indexEntry 0 buckets)
+                      , indexEntry 0 s_buckets)
                     , ( name (undefined :: Tagged Extended Index)
-                      , indexEntry 0 buckets)
+                      , indexEntry 0 e_buckets)
                     ]
 
 

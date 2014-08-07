@@ -13,7 +13,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 import Control.Applicative
-import Control.Lens hiding (Index, Simple)
+import Control.Lens hiding (Index, Simple, index)
 import Data.Bits.Lens
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
@@ -98,20 +98,27 @@ testNS = "PONIES"
 registerWritesIndex :: Expectation
 registerWritesIndex = do
     s <- memoryStore
-    registerNamespace s testNS 12
+    registerNamespace s testNS 10 20
     ixs <- fetchIndexes s testNS
-    ixs `shouldBe` Just (Tagged [(0, 12)], Tagged [(0,12)])
+    ixs `shouldBe` Just (Tagged [(0, 10)], Tagged [(0,20)])
 
 writeEncodedBlob :: Expectation
 writeEncodedBlob = do
     s <- memoryStore
-    registerNamespace s testNS 12
+    -- Write the indexes as our previous tests expect to disk.
+    write s testNS [ ( name (undefined :: Tagged Simple Index)
+                     , untag simpleIndex ^. from index
+                     )
+                   , ( name (undefined :: Tagged Extended Index)
+                     , untag extendedIndex ^. from index
+                     )
+                   ]
     writeEncoded s testNS 42 (simplePoints <> extendedPoints)
     buckets <- fetchs s testNS [name (SimpleBucketLocation (0,0))]
     dumpMemoryStore s >>= putStrLn
     case sequence buckets of
         Just [s'0_0] -> do
-            SimpleWrite (byteString s'0_0) `shouldBe` (s0_0 )-- <> p0_0)
+            SimpleWrite (byteString s'0_0) `shouldBe` (s0_0 <> p0_0)
         _ ->
             error "failed to fetch one of the buckets" -- have fun finding it
 
@@ -176,16 +183,16 @@ p0_0, p0_2 :: SimpleWrite
 p0_0 = fromString . concat $
     [ "\x01\x00\x00\x00\x00\x00\x00\x00" -- Address
     , "\x01\x00\x00\x00\x00\x00\x00\x00" -- Time
-    , "\x0a\x00\x00\x00\x00\x00\x00\x00" -- Offset (base os of 10 + 0)
+    , "\x00\x00\x00\x00\x00\x00\x00\x00" -- Offset (base os of 0 + 0)
     , "\x01\x00\x00\x00\x00\x00\x00\x00" -- Address
     , "\x02\x00\x00\x00\x00\x00\x00\x00" -- Time
-    , "\x15\x00\x00\x00\x00\x00\x00\x00" -- Offset (base os of 10 + 11)
+    , "\x0b\x00\x00\x00\x00\x00\x00\x00" -- Offset (base os of 0 + 11)
     ]                                    -- where 11 is 8 bytes + "hai"
 
 p0_2 = fromString . concat $
     [ "\x03\x00\x00\x00\x00\x00\x00\x00" -- Address
     , "\x01\x00\x00\x00\x00\x00\x00\x00" -- Time
-    , "\x0a\x00\x00\x00\x00\x00\x00\x00" -- Offset (10 + 0)
+    , "\x00\x00\x00\x00\x00\x00\x00\x00" -- Offset 0
     ]
 
 -- And extended buckets, which are separate.
@@ -215,7 +222,7 @@ groupExtended = do
   where
     -- | Our extended offsets
     oss :: Map (Epoch, Bucket) Word64
-    oss = Map.fromList [ ((0,0), 10), ((0,2), 10) ]
+    oss = Map.fromList [ ((0,0), 0), ((0,2), 0) ]
 
     simpleWrites :: Map (Epoch, Bucket) L.ByteString
     simpleWrites =
