@@ -114,11 +114,20 @@ writeEncodedBlob = do
                      )
                    ]
     writeEncoded s testNS 42 (simplePoints <> extendedPoints)
-    buckets <- fetchs s testNS [name (SimpleBucketLocation (0,0))]
+    buckets <- fetchs s testNS [ name (SimpleBucketLocation (0,0))
+                               , name (SimpleBucketLocation (0,2))
+                               , name (SimpleBucketLocation (6,8))
+                               , name (ExtendedBucketLocation (0,0))
+                               , name (ExtendedBucketLocation (0,2))
+                               ]
     dumpMemoryStore s >>= putStrLn
-    case sequence buckets of
-        Just [s'00] -> do
-            SimpleWrite (byteString s'00) `shouldBe` (s00 <> p00)
+    case sequence (buckets & traversed . traversed %~ byteString) of
+        Just [s'00, s'02, s'68, e'00, e'02] -> do
+            SimpleWrite s'00 `shouldBe` (s00 <> p00)
+            SimpleWrite s'02 `shouldBe` (s02 <> p02)
+            SimpleWrite s'68 `shouldBe` s68
+            ExtendedWrite e'00 `shouldBe` e00
+            ExtendedWrite e'02 `shouldBe` e02
         _ ->
             error "failed to fetch one of the buckets" -- have fun finding it
 
@@ -131,7 +140,6 @@ propGroups (MixedPayload x) =  do
     -- extended max. This is because adding an extended point will add a
     -- pointer to the simple bucket.
     e_max <= s_max
-
 
 groupSimple :: Expectation
 groupSimple =
@@ -208,7 +216,6 @@ e02 = fromString . concat $
     [ "\x04\x00\x00\x00\x00\x00\x00\x00" -- Length
     , "pony"                             -- Payload
     ]
-
 
 writeToLazy :: SimpleWrite -> L.ByteString
 writeToLazy = toLazyByteString . unSimpleWrite
