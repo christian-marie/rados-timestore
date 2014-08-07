@@ -19,6 +19,7 @@ module TimeStore.Index
     index,
     locationLookup,
     indexLookup,
+    rangeLookup
 ) where
 
 import Control.Applicative
@@ -67,6 +68,7 @@ index = iso byteStringToIndex indexToByteString
             flip itraverse_ m $ \(Epoch k) (Bucket v) ->
                 putWord64LE k >> putWord64LE v
 
+-- | Given a time and address, place a point in an epoch and bucket.
 locationLookup :: Time -> Address -> Index -> (Epoch, Bucket)
 locationLookup t (Address addr) ix =
     let (epoch, Bucket max_bucket) = indexLookup t ix
@@ -76,7 +78,7 @@ locationLookup t (Address addr) ix =
 indexLookup :: Time -> Index -> (Epoch, Bucket)
 indexLookup t ix = fst (splitRemainder t ix)
 
--- Return first and the remainder that is later than that.
+-- | First result, and then the remainder that is later than that.
 splitRemainder :: Time -> Index -> ((Epoch, Bucket), Index)
 splitRemainder (Time t) (Index m) =
     let (left, middle, right) = Map.splitLookup (Epoch t) m
@@ -86,3 +88,10 @@ splitRemainder (Time t) (Index m) =
                         else Map.findMax left
             Nothing -> Map.findMax left
     in (first, Index right)
+
+-- | All results within a given time range, used for read queries
+rangeLookup :: Time -> Time -> Index -> [(Epoch, Bucket)]
+rangeLookup start (Time end) dm =
+    let (first, Index remainder) = splitRemainder start dm
+        (rest,_) = Map.split (Epoch end) remainder
+    in first : Map.toList rest
