@@ -8,36 +8,51 @@
 --
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TypeFamilies               #-}
 
 module TimeStore.Stores.Memory
 (
     MemoryStore,
     memoryStore,
+    dumpMemoryStore,
 ) where
 
 import Control.Applicative
 import Control.Concurrent hiding (yield)
+import Control.Lens hiding (Index, Simple)
 import Control.Monad
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as S
+import qualified Data.ByteString.Char8 as S
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Monoid
 import Data.Word (Word64)
+import Hexdump
+import Prelude
 import TimeStore.Core
 
 newtype Key = Key ByteString
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
 
 key :: NameSpace -> ObjectName -> Key
-key (NameSpace ns) (ObjectName on) = Key (S.append ns on)
+key (NameSpace ns) (ObjectName on) = Key ("02_" <> ns <> "_" <> on)
 
 data MemoryStore
     = MemoryStore (MVar (Map Key ByteString)) (MVar [LockName])
 
 memoryStore :: IO MemoryStore
 memoryStore = MemoryStore <$> newMVar mempty <*> newMVar mempty
+
+dumpMemoryStore :: MemoryStore -> IO String
+dumpMemoryStore (MemoryStore objects locks) = do
+    objs <- ifoldlOf itraversed fmt mempty <$> readMVar objects
+    lcks <- show <$> readMVar locks
+    return $ "MemoryStore: \n" ++ objs ++ "\nLocks:\n" ++ lcks
+  where
+    fmt (Key k) acc v =
+        acc <> S.unpack k <> ":\n" <> prettyHex v <> "\n"
+
 
 instance Store MemoryStore where
     type FetchFuture = Maybe ByteString

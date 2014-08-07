@@ -32,8 +32,7 @@ import Test.QuickCheck
 import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
-
-import Debug.Trace
+import TimeStore
 
 newtype MixedPayload = MixedPayload { unMixedPayload :: ByteString }
   deriving (Eq, Show)
@@ -45,7 +44,7 @@ newtype SimplePoint = SimplePoint { unSimplePoint :: ByteString }
 
 instance Arbitrary MixedPayload where
     arbitrary = do
-        len <- arbitrary `suchThat` (\x -> x >= 0 && x < 1048576)
+        len <- (`mod` 1024) . abs <$> arbitrary
         MixedPayload . L.toStrict . L.fromChunks <$> go [] len
       where
         go :: [ByteString] -> Int -> Gen [ByteString]
@@ -67,7 +66,7 @@ instance Arbitrary ExtendedPoint where
     arbitrary = do
         p <- arbitrary
         let p'@(Point _ _ len) = p & address . bitAt 0 .~ True
-                                   & payload .&.~ 0xfff
+                                   & payload .&.~ 0xff
 
         -- This is kind of slow
         pl <- S.pack <$> vectorOf (fromIntegral len) arbitrary
@@ -85,6 +84,36 @@ main =
             it "groups simple points" groupSimple
             it "groups extended points" groupExtended
             prop "group arbitrary valid points" propGroups
+
+        describe "user api" $ do
+            describe "registerOrigin" $
+                it "writes index files out" registerWritesIndex
+
+            describe "writeEncoded" $
+                it "mixed blob writes expected buckets" writeEncodedBlob
+
+testNS :: NameSpace
+testNS = "PONIES"
+
+registerWritesIndex :: Expectation
+registerWritesIndex = do
+    s <- memoryStore
+    registerNamespace s testNS 12
+    ixs <- fetchIndexes s testNS
+    ixs `shouldBe` Just (Tagged [(0, 12)], Tagged [(0,12)])
+
+writeEncodedBlob :: Expectation
+writeEncodedBlob = do
+    s <- memoryStore
+    registerNamespace s testNS 12
+    writeEncoded s testNS 42 (simplePoints <> extendedPoints)
+    buckets <- fetchs s testNS [name (SimpleBucketLocation (0,0))]
+    dumpMemoryStore s >>= putStrLn
+    case sequence buckets of
+        Just [s'0_0] -> do
+            SimpleWrite (byteString s'0_0) `shouldBe` (s0_0 )-- <> p0_0)
+        _ ->
+            error "failed to fetch one of the buckets" -- have fun finding it
 
 propGroups :: MixedPayload -> Bool
 propGroups (MixedPayload x) =  do
@@ -107,9 +136,9 @@ groupSimple =
                 , Tagged Simple Time                   -- Latest simple write
                 , Tagged Extended Time)                -- Latest extended write
     grouped =
-        ( Map.fromList [ ((0,0), bucket0_0) :: ((Epoch, Bucket), SimpleWrite)
-                       , ((0,2), bucket0_2)
-                       , ((6,8), bucket6_8)
+        ( Map.fromList [ ((0,0), s0_0) :: ((Epoch, Bucket), SimpleWrite)
+                       , ((0,2), s0_2)
+                       , ((6,8), s6_8)
                        ]
         , mempty
         , mempty
@@ -117,26 +146,65 @@ groupSimple =
         , 0
         )
 
-    bucket0_0 = fromString . concat $
-        [ "\x00\x00\x00\x00\x00\x00\x00\x00" -- Point 0 0 0
-        , "\x00\x00\x00\x00\x00\x00\x00\x00"
-        , "\x00\x00\x00\x00\x00\x00\x00\x00"
-        , "\x04\x00\x00\x00\x00\x00\x00\x00" -- Point 4 4 0 (4 % 4 == 0)
-        , "\x04\x00\x00\x00\x00\x00\x00\x00"
-        , "\x00\x00\x00\x00\x00\x00\x00\x00"
-        ]
+-- Expected test buckets
+--
+-- Simple:
+s0_0, s0_2, s6_8 :: SimpleWrite
+s0_0 = fromString . concat $
+    [ "\x00\x00\x00\x00\x00\x00\x00\x00" -- Point 0 0 0
+    , "\x00\x00\x00\x00\x00\x00\x00\x00"
+    , "\x00\x00\x00\x00\x00\x00\x00\x00"
+    , "\x04\x00\x00\x00\x00\x00\x00\x00" -- Point 4 4 0 (4 % 4 == 0)
+    , "\x04\x00\x00\x00\x00\x00\x00\x00"
+    , "\x00\x00\x00\x00\x00\x00\x00\x00"
+    ]
 
-    bucket0_2 = fromString . concat $
-        [ "\x02\x00\x00\x00\x00\x00\x00\x00" -- Point 2 2 0
-        , "\x02\x00\x00\x00\x00\x00\x00\x00"
-        , "\x00\x00\x00\x00\x00\x00\x00\x00"
-        ]
+s0_2 = fromString . concat $
+    [ "\x02\x00\x00\x00\x00\x00\x00\x00" -- Point 2 2 0
+    , "\x02\x00\x00\x00\x00\x00\x00\x00"
+    , "\x00\x00\x00\x00\x00\x00\x00\x00"
+    ]
 
-    bucket6_8 = fromString . concat $
-        [ "\x08\x00\x00\x00\x00\x00\x00\x00" -- Point 8 8 0
-        , "\x08\x00\x00\x00\x00\x00\x00\x00"
-        , "\x00\x00\x00\x00\x00\x00\x00\x00"
-        ]
+s6_8 = fromString . concat $
+    [ "\x08\x00\x00\x00\x00\x00\x00\x00" -- Point 8 8 0
+    , "\x08\x00\x00\x00\x00\x00\x00\x00"
+    , "\x00\x00\x00\x00\x00\x00\x00\x00"
+    ]
+
+-- Pointers (also simple writes)
+p0_0, p0_2 :: SimpleWrite
+p0_0 = fromString . concat $
+    [ "\x01\x00\x00\x00\x00\x00\x00\x00" -- Address
+    , "\x01\x00\x00\x00\x00\x00\x00\x00" -- Time
+    , "\x0a\x00\x00\x00\x00\x00\x00\x00" -- Offset (base os of 10 + 0)
+    , "\x01\x00\x00\x00\x00\x00\x00\x00" -- Address
+    , "\x02\x00\x00\x00\x00\x00\x00\x00" -- Time
+    , "\x15\x00\x00\x00\x00\x00\x00\x00" -- Offset (base os of 10 + 11)
+    ]                                    -- where 11 is 8 bytes + "hai"
+
+p0_2 = fromString . concat $
+    [ "\x03\x00\x00\x00\x00\x00\x00\x00" -- Address
+    , "\x01\x00\x00\x00\x00\x00\x00\x00" -- Time
+    , "\x0a\x00\x00\x00\x00\x00\x00\x00" -- Offset (10 + 0)
+    ]
+
+-- And extended buckets, which are separate.
+e0_0, e0_2 :: ExtendedWrite
+e0_0 = fromString . concat $
+    [ "\x03\x00\x00\x00\x00\x00\x00\x00" -- Length
+    , "hai"                              -- Payload
+    , "\x05\x00\x00\x00\x00\x00\x00\x00" -- Length
+    , "there"                            -- Payload
+    ]
+
+e0_2 = fromString . concat $
+    [ "\x04\x00\x00\x00\x00\x00\x00\x00" -- Length
+    , "pony"                             -- Payload
+    ]
+
+
+writeToLazy :: SimpleWrite -> L.ByteString
+writeToLazy = toLazyByteString . unSimpleWrite
 
 groupExtended :: Expectation
 groupExtended = do
@@ -151,29 +219,13 @@ groupExtended = do
 
     simpleWrites :: Map (Epoch, Bucket) L.ByteString
     simpleWrites =
-        Map.fromList [ ((0,0), ptrs_0_0 )
-                     , ((0,2), ptrs_0_2 )
+        Map.fromList [ ((0,0), writeToLazy p0_0 )
+                     , ((0,2), writeToLazy p0_2 )
                      ]
-      where
-        ptrs_0_0 = fromString . concat $
-            [ "\x01\x00\x00\x00\x00\x00\x00\x00" -- Address
-            , "\x01\x00\x00\x00\x00\x00\x00\x00" -- Time
-            , "\x0a\x00\x00\x00\x00\x00\x00\x00" -- Offset (base os of 10 + 0)
-            , "\x01\x00\x00\x00\x00\x00\x00\x00" -- Address
-            , "\x02\x00\x00\x00\x00\x00\x00\x00" -- Time
-            , "\x15\x00\x00\x00\x00\x00\x00\x00" -- Offset (base os of 10 + 11)
-            ]                                    -- where 11 is 8 bytes + "hai"
-
-        ptrs_0_2 = fromString . concat $
-            [ "\x03\x00\x00\x00\x00\x00\x00\x00" -- Address
-            , "\x01\x00\x00\x00\x00\x00\x00\x00" -- Time
-            , "\x0a\x00\x00\x00\x00\x00\x00\x00" -- Offset (10 + 0)
-            ]
-
     grouped =
         ( mempty
-        , Map.fromList [ ((0, 0), bucket0_0) :: ((Epoch, Bucket), ExtendedWrite)
-                       , ((0, 2), bucket0_2)
+        , Map.fromList [ ((0, 0), e0_0) :: ((Epoch, Bucket), ExtendedWrite)
+                       , ((0, 2), e0_2)
                        ]
         , Map.fromList [ ((0, 0), PointerWrite 24 undefined)
                        , ((0, 2), PointerWrite 12 undefined)
@@ -181,17 +233,6 @@ groupExtended = do
         , 2
         , 2
         )
-    bucket0_0 = fromString . concat $
-        [ "\x03\x00\x00\x00\x00\x00\x00\x00" -- Length
-        , "hai"                              -- Payload
-        , "\x05\x00\x00\x00\x00\x00\x00\x00" -- Length
-        , "there"                            -- Payload
-        ]
-
-    bucket0_2 = fromString . concat $
-        [ "\x04\x00\x00\x00\x00\x00\x00\x00" -- Length
-        , "pony"                             -- Payload
-        ]
 
 simplePoints :: ByteString
 simplePoints = vectorToByteString [Point 0 0 0, Point 2 2 0, Point 4 4 0, Point 8 8 0]

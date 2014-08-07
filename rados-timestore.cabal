@@ -21,9 +21,10 @@ library
   default-language:  Haskell2010
 
   exposed-modules:   TimeStore
-  other-modules:     TimeStore.Core,
-                     TimeStore.Index,
+                     TimeStore.Core
+                     TimeStore.Index
                      TimeStore.Algorithms
+                     TimeStore.Stores.Memory
   build-depends:     base >=3 && <5,
                      bytestring,
                      packer,
@@ -32,6 +33,7 @@ library
                      vector,
                      lens,
                      unix,
+                     pretty-hex,
                      spool,
                      tagged,
                      containers,
@@ -46,12 +48,10 @@ library
   ghc-prof-options:  -auto-all
 
 test-suite           unit-tests
-  hs-source-dirs:    lib, tests
+  hs-source-dirs:    tests
   main-is:           UnitTests.hs
   type:              exitcode-stdio-1.0
   default-language:  Haskell2010
-  other-modules:     TimeStore.Core,
-                     TimeStore.Algorithms
   build-depends:     base >=3 && <5,
                      hspec,
                      QuickCheck,

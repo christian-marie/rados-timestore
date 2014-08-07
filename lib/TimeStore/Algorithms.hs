@@ -35,6 +35,7 @@ import Data.Tagged
 import Data.Word (Word64)
 import TimeStore.Core
 import TimeStore.Index
+import Hexdump
 
 -- | The data portion of extended points. For each entry into this write, there
 -- will be a corresponding pointer from a SimpleWrite.
@@ -43,7 +44,7 @@ newtype ExtendedWrite = ExtendedWrite { unExtendedWrite :: Builder }
 
 instance Show ExtendedWrite where
     show =
-        ("ExtendedWrite: "++ ) . show . L.unpack . toLazyByteString . unExtendedWrite
+        ("ExtendedWrite: "++ ) . prettyHex . L.toStrict . toLazyByteString . unExtendedWrite
 
 instance Eq ExtendedWrite where
     (ExtendedWrite a) == (ExtendedWrite b) =
@@ -76,7 +77,7 @@ newtype SimpleWrite = SimpleWrite { unSimpleWrite :: Builder }
 
 instance Show SimpleWrite where
     show =
-        ("SimpleWrite: " ++) . show . L.unpack . toLazyByteString . unSimpleWrite
+        ("SimpleWrite: " ++) . prettyHex . L.toStrict . toLazyByteString . unSimpleWrite
 
 instance Eq SimpleWrite where
     (SimpleWrite a) == (SimpleWrite b) =

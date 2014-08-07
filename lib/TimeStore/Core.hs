@@ -44,6 +44,7 @@ import Control.Exception
 import Control.Lens (makeLenses)
 import Data.Bits
 import Data.ByteString (ByteString)
+import Text.Printf
 import Data.String (IsString)
 import Data.Tagged
 import Data.Word (Word64)
@@ -51,6 +52,7 @@ import Foreign.Ptr
 import Foreign.Storable
 import qualified Pipes.Prelude as Pipes
 import System.Posix.Signals
+import qualified Data.ByteString.Char8 as S
 
 -- | A concrete implementation of a storage backend for a time store.
 --
@@ -143,10 +145,17 @@ newtype SimpleBucketLocation = SimpleBucketLocation (Epoch,Bucket)
 newtype ExtendeBucketLocation = ExtendedBucketLocation (Epoch,Bucket)
 
 instance Nameable SimpleBucketLocation where
-    name (SimpleBucketLocation (e,b)) = undefined
+    name (SimpleBucketLocation (e,b)) = bucketLocation e b "simple"
 
 instance Nameable ExtendeBucketLocation where
-    name = undefined
+    name (ExtendedBucketLocation (e,b)) = bucketLocation e b "extended"
+
+bucketLocation :: Epoch -> Bucket -> String -> ObjectName
+bucketLocation (Epoch epoch) (Bucket bucket) kind =
+    ObjectName . S.pack $ printf "%020d_%020d_%s"
+                                 bucket
+                                 epoch
+                                 kind
 
 newtype Bucket
     = Bucket { unBucket :: Word64 }
@@ -158,6 +167,7 @@ newtype LockName
 
 newtype NameSpace
     = NameSpace { unNameSpace :: ByteString }
+  deriving (Eq, Ord, Show, IsString)
 
 newtype Epoch = Epoch { unEpoch :: Word64 }
   deriving (Eq, Ord, Num, Show)

@@ -14,8 +14,13 @@
 module TimeStore
 (
     writeEncoded,
+    registerNamespace,
+    -- * Utility/internal
+    isRegistered,
+    fetchIndexes,
     MemoryStore,
     memoryStore,
+    dumpMemoryStore,
 ) where
 
 import Control.Applicative
@@ -37,12 +42,30 @@ import TimeStore.Stores.Memory
 
 type Stream = ()
 
+isRegistered :: Store s => s -> NameSpace -> IO Bool
+isRegistered s ns = isJust <$> fetchIndexes s ns
+
+-- | Register a namespace with the given number of buckets. This is idempotent,
+-- however on subsequent runs the bucket argument will be ignored.
+registerNamespace :: Store s => s -> NameSpace -> Word64 -> IO ()
+registerNamespace s ns buckets = do
+    registered <- isRegistered s ns
+    unless registered $
+        append s ns [ ( name (undefined :: Tagged Simple Index)
+                      , indexEntry 0 buckets)
+                    , ( name (undefined :: Tagged Extended Index)
+                      , indexEntry 0 buckets)
+                    ]
+    
+
 -- | Write a mixed blob of points to the supplied store and namespace.
-writeEncoded:: Store s => s -> NameSpace -> Word64 -> ByteString -> IO ()
+writeEncoded :: Store s => s -> NameSpace -> Word64 -> ByteString -> IO ()
 writeEncoded s ns bucket_threshold encoded =
     withLock s ns "write_lock" $ do
-        -- Group our writes using the latest indexes
-        (s_idx, e_idx) <- getIndexes s ns
+        -- Grab the latest index.
+        --
+        -- TODO: Proper exception.
+        (s_idx, e_idx) <- fromMaybe (error "Invalid index") <$> fetchIndexes s ns
         let (s_writes, e_writes, p_writes,
              s_latest, e_latest) = groupMixed s_idx e_idx encoded
 
@@ -102,7 +125,7 @@ writeEncoded s ns bucket_threshold encoded =
 
 -- | Do a roll over on the supplied index if any of the buckets have become too
 -- large.
-maybeRollover :: forall a s. (Nameable (Tagged a Index), Store s)
+maybeRollover :: (Nameable (Tagged a Index), Store s)
               => s
               -> NameSpace
               -> Word64
@@ -116,12 +139,13 @@ maybeRollover s ns bucket_threshold offsets (Tagged (Time latest)) idx = do
     case wr_fld of
         Just max_wr ->
             when (max_wr > bucket_threshold)
-                 (append s ns [(name idx, build buckets)])
+                 (append s ns [(name idx, indexEntry latest buckets)])
         _ ->
             return ()
-  where
-    build buckets =
-        runPacking 16 (putWord64LE latest >> putWord64LE buckets)
+
+indexEntry :: Word64 -> Word64 -> ByteString
+indexEntry epoch buckets =
+    runPacking 16 (putWord64LE epoch >> putWord64LE buckets)
 
 updateLatest :: Store s => s
              -> NameSpace
@@ -159,18 +183,20 @@ updateLatest s ns s_time e_time = withLock s ns "latest_update" $ do
     simpleLatest = "simple_latest"
     extendedLatest = "extended_latest"
 
-getIndexes :: Store s => s -> NameSpace -> IO (Tagged Simple Index, Tagged Extended Index)
-getIndexes s ns = do
+fetchIndexes :: Store s
+             => s -> NameSpace
+             -> IO (Maybe (Tagged Simple Index, Tagged Extended Index))
+fetchIndexes s ns = do
     ixs <- fetchs s ns [name (undefined :: Tagged Simple Index)
                        ,name (undefined :: Tagged Extended Index)]
-    case ixs of
-        [Just s_idx, Just e_idx] ->
-            return (Tagged (s_idx ^. index)
-                   ,Tagged (e_idx ^. index))
-        [Nothing, Nothing] ->
-            error "Invalid origin" -- TODO: proper exception
+    return $ case sequence ixs of
+        Just [s_idx, e_idx] ->
+            Just ( Tagged (s_idx ^. index)
+                 , Tagged (e_idx ^. index)
+                 )
+        Nothing -> Nothing
         _ ->
-            error "getIndexes: did not get all indexes or no indexes"
+            error "getIndexes: impossible"
 
 readAddrs :: Store s => s -> NameSpace -> [Address] -> IO Stream
 readAddrs = undefined
