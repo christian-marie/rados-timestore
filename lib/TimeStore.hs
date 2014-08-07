@@ -72,7 +72,7 @@ writeEncoded s ns bucket_threshold encoded =
         -- Grab the latest index.
         --
         -- TODO: Proper exception.
-        (s_idx, e_idx) <- fromMaybe (error "Invalid index") <$> fetchIndexes s ns
+        (s_idx, e_idx) <- fromMaybe (error "Invalid namespace") <$> fetchIndexes s ns
         let (s_writes, e_writes, p_writes,
              s_latest, e_latest) = groupMixed s_idx e_idx encoded
 
@@ -85,7 +85,9 @@ writeEncoded s ns bucket_threshold encoded =
         -- unsafePartsOf is needed so that we can change the return type, it
         -- will explode only if the length of domain to getOffsets is
         -- different to the length of the codomain.
-        e_offsets <- unsafePartsOf (itraversed . withIndex) (getOffsets SimpleBucketLocation) e_writes
+        e_offsets <- unsafePartsOf (itraversed . withIndex)
+                                   (getOffsets ExtendedBucketLocation)
+                                   e_writes
 
         -- Now adjust the offsets in the simple pointers.
         let p_adjusted = traversed %~ applyOffsets e_offsets $ p_writes
@@ -104,7 +106,9 @@ writeEncoded s ns bucket_threshold encoded =
 
         -- Now check the sizes of those buckets so that we can decide if we
         -- want to trigger a rollover
-        s_offsets <- unsafePartsOf (itraversed . withIndex) (getOffsets ExtendedBucketLocation) s_union
+        s_offsets <- unsafePartsOf (itraversed . withIndex)
+                                   (getOffsets SimpleBucketLocation)
+                                   s_union
 
         maybeRollover s ns bucket_threshold s_offsets s_latest' s_idx
         maybeRollover s ns bucket_threshold e_offsets e_latest' e_idx
@@ -161,9 +165,7 @@ updateLatest :: Store s => s
              -> IO (Tagged Simple Time, Tagged Extended Time)
 updateLatest s ns s_time e_time = withLock s ns "latest_update" $ do
     latests <- fetchs s ns [simpleLatest, extendedLatest]
-    let parsed = traversed . traversed %~ parse $ latests
-
-    case parsed of
+    case latests & traversed . traversed %~ parse of
         [Just s_latest, Just e_latest] -> do
             write s ns $ mkWrite s_latest s_time
                        ++ mkWrite e_latest e_time

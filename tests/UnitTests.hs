@@ -29,10 +29,10 @@ import Data.Word (Word64)
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
+import TimeStore
 import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
-import TimeStore
 
 newtype MixedPayload = MixedPayload { unMixedPayload :: ByteString }
   deriving (Eq, Show)
@@ -113,21 +113,32 @@ writeEncodedBlob = do
                      , untag extendedIndex ^. from index
                      )
                    ]
-    writeEncoded s testNS 42 (simplePoints <> extendedPoints)
-    buckets <- fetchs s testNS [ name (SimpleBucketLocation (0,0))
+    writeEncoded s testNS 0 (simplePoints <> extendedPoints)
+    objects <- fetchs s testNS [ name (SimpleBucketLocation (0,0))
                                , name (SimpleBucketLocation (0,2))
                                , name (SimpleBucketLocation (6,8))
                                , name (ExtendedBucketLocation (0,0))
                                , name (ExtendedBucketLocation (0,2))
+                               , name (undefined :: Tagged Simple Index)
+                               , name (undefined :: Tagged Extended Index)
+                               , name (undefined :: LatestFile Simple)
+                               , name (undefined :: LatestFile Extended)
                                ]
-    dumpMemoryStore s >>= putStrLn
-    case sequence (buckets & traversed . traversed %~ byteString) of
-        Just [s'00, s'02, s'68, e'00, e'02] -> do
-            SimpleWrite s'00 `shouldBe` (s00 <> p00)
-            SimpleWrite s'02 `shouldBe` (s02 <> p02)
-            SimpleWrite s'68 `shouldBe` s68
-            ExtendedWrite e'00 `shouldBe` e00
-            ExtendedWrite e'02 `shouldBe` e02
+    case sequence objects of
+        Just [s'00, s'02, s'68, e'00, e'02, s_ix, e_ix, s_last, e_last] -> do
+            SimpleWrite (byteString s'00) `shouldBe` (s00 <> p00)
+            SimpleWrite (byteString s'02) `shouldBe` (s02 <> p02)
+            SimpleWrite (byteString s'68) `shouldBe` s68
+            ExtendedWrite (byteString e'00) `shouldBe` e00
+            ExtendedWrite (byteString e'02) `shouldBe` e02
+            -- No rollover as offsets are checked *before* write
+            Tagged (e_ix ^.index) `shouldBe` extendedIndex
+            -- But the simple points will roll over and add a new entry at
+            -- epoch 8 with 10 buckets.
+            s_ix ^. index `shouldBe` [ (0, 4), (6, 10), (8, 10) ]
+
+            s_last `shouldBe` "\x08\x00\00\x00\x00\x00\x00\x00"
+            e_last `shouldBe` "\x02\x00\00\x00\x00\x00\x00\x00"
         _ ->
             error "failed to fetch one of the buckets" -- have fun finding it
 
