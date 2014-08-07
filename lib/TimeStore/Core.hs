@@ -101,7 +101,7 @@ class Store s where
     -- | Safely acquire a lock, if your action takes longer than a (arbitrary)
     -- timeout, then we will be forced to abort() so that nothing is broken.
     withLock :: s -> NameSpace -> LockName -> IO a -> IO a
-    withLock s ns ln f = do
+    withLock s ns ln f =
         unsafeLock s ns lockTimeout ln $ do
             r <- race (threadDelay (lockTimeout * 1000000)) f
             case r of

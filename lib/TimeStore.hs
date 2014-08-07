@@ -170,8 +170,9 @@ updateLatest s ns s_time e_time = withLock s ns "latest_update" $ do
             return (max' s_latest s_time, max' e_latest e_time)
         [Nothing, Nothing] -> do
             -- First write
-            write s ns $ [(simpleLatest, pack . unTime . untag $ s_time)
-                         ,(extendedLatest, pack . unTime . untag $ e_time)]
+            write s ns [ (simpleLatest, pack . unTime . untag $ s_time)
+                       , (extendedLatest, pack . unTime . untag $ e_time)
+                       ]
             return (s_time, e_time)
         _ -> error "updateLatest: did not get both or no latest"
   where
@@ -181,9 +182,7 @@ updateLatest s ns s_time e_time = withLock s ns "latest_update" $ do
     mkWrite :: forall a. Nameable (LatestFile a)
             => Word64 -> Tagged a Time -> [(ObjectName, ByteString)]
     mkWrite latest (Tagged (Time t)) =
-        if latest < t
-            then [(name (undefined :: LatestFile a), pack t)]
-            else []
+        [(name (undefined :: LatestFile a), pack t) | latest < t]
 
     pack x = runPacking 8 (putWord64LE x)
     parse = runUnpacking getWord64LE

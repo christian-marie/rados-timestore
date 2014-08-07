@@ -12,3 +12,6 @@ tags: $(SOURCES)
 
 format: $(SOURCES)
 	stylish-haskell -i $^
+
+lint: $(SOURCES)
+	for i in $^; do hlint $$i; done

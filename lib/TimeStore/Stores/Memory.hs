@@ -76,9 +76,9 @@ instance Store MemoryStore where
 
     unsafeLock s@(MemoryStore _ locks) ns x lock f = do
         got_it <- modifyMVar locks $ \ls ->
-            if lock `elem` ls
-                then return (ls, False)
-                else return (lock:ls, True)
+            return (if lock `elem` ls
+                then (ls, False)
+                else (lock:ls, True))
         if got_it
             then do
                 r <- f

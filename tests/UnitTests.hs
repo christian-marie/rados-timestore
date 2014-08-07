@@ -117,8 +117,8 @@ writeEncodedBlob = do
     buckets <- fetchs s testNS [name (SimpleBucketLocation (0,0))]
     dumpMemoryStore s >>= putStrLn
     case sequence buckets of
-        Just [s'0_0] -> do
-            SimpleWrite (byteString s'0_0) `shouldBe` (s0_0 <> p0_0)
+        Just [s'00] -> do
+            SimpleWrite (byteString s'00) `shouldBe` (s00 <> p00)
         _ ->
             error "failed to fetch one of the buckets" -- have fun finding it
 
@@ -143,9 +143,9 @@ groupSimple =
                 , Tagged Simple Time                   -- Latest simple write
                 , Tagged Extended Time)                -- Latest extended write
     grouped =
-        ( Map.fromList [ ((0,0), s0_0) :: ((Epoch, Bucket), SimpleWrite)
-                       , ((0,2), s0_2)
-                       , ((6,8), s6_8)
+        ( Map.fromList [ ((0,0), s00) :: ((Epoch, Bucket), SimpleWrite)
+                       , ((0,2), s02)
+                       , ((6,8), s68)
                        ]
         , mempty
         , mempty
@@ -156,8 +156,8 @@ groupSimple =
 -- Expected test buckets
 --
 -- Simple:
-s0_0, s0_2, s6_8 :: SimpleWrite
-s0_0 = fromString . concat $
+s00, s02, s68 :: SimpleWrite
+s00 = fromString . concat $
     [ "\x00\x00\x00\x00\x00\x00\x00\x00" -- Point 0 0 0
     , "\x00\x00\x00\x00\x00\x00\x00\x00"
     , "\x00\x00\x00\x00\x00\x00\x00\x00"
@@ -166,21 +166,21 @@ s0_0 = fromString . concat $
     , "\x00\x00\x00\x00\x00\x00\x00\x00"
     ]
 
-s0_2 = fromString . concat $
+s02 = fromString . concat $
     [ "\x02\x00\x00\x00\x00\x00\x00\x00" -- Point 2 2 0
     , "\x02\x00\x00\x00\x00\x00\x00\x00"
     , "\x00\x00\x00\x00\x00\x00\x00\x00"
     ]
 
-s6_8 = fromString . concat $
+s68 = fromString . concat $
     [ "\x08\x00\x00\x00\x00\x00\x00\x00" -- Point 8 8 0
     , "\x08\x00\x00\x00\x00\x00\x00\x00"
     , "\x00\x00\x00\x00\x00\x00\x00\x00"
     ]
 
 -- Pointers (also simple writes)
-p0_0, p0_2 :: SimpleWrite
-p0_0 = fromString . concat $
+p00, p02 :: SimpleWrite
+p00 = fromString . concat $
     [ "\x01\x00\x00\x00\x00\x00\x00\x00" -- Address
     , "\x01\x00\x00\x00\x00\x00\x00\x00" -- Time
     , "\x00\x00\x00\x00\x00\x00\x00\x00" -- Offset (base os of 0 + 0)
@@ -189,22 +189,22 @@ p0_0 = fromString . concat $
     , "\x0b\x00\x00\x00\x00\x00\x00\x00" -- Offset (base os of 0 + 11)
     ]                                    -- where 11 is 8 bytes + "hai"
 
-p0_2 = fromString . concat $
+p02 = fromString . concat $
     [ "\x03\x00\x00\x00\x00\x00\x00\x00" -- Address
     , "\x01\x00\x00\x00\x00\x00\x00\x00" -- Time
     , "\x00\x00\x00\x00\x00\x00\x00\x00" -- Offset 0
     ]
 
 -- And extended buckets, which are separate.
-e0_0, e0_2 :: ExtendedWrite
-e0_0 = fromString . concat $
+e00, e02 :: ExtendedWrite
+e00 = fromString . concat $
     [ "\x03\x00\x00\x00\x00\x00\x00\x00" -- Length
     , "hai"                              -- Payload
     , "\x05\x00\x00\x00\x00\x00\x00\x00" -- Length
     , "there"                            -- Payload
     ]
 
-e0_2 = fromString . concat $
+e02 = fromString . concat $
     [ "\x04\x00\x00\x00\x00\x00\x00\x00" -- Length
     , "pony"                             -- Payload
     ]
@@ -226,13 +226,13 @@ groupExtended = do
 
     simpleWrites :: Map (Epoch, Bucket) L.ByteString
     simpleWrites =
-        Map.fromList [ ((0,0), writeToLazy p0_0 )
-                     , ((0,2), writeToLazy p0_2 )
+        Map.fromList [ ((0,0), writeToLazy p00 )
+                     , ((0,2), writeToLazy p02 )
                      ]
     grouped =
         ( mempty
-        , Map.fromList [ ((0, 0), e0_0) :: ((Epoch, Bucket), ExtendedWrite)
-                       , ((0, 2), e0_2)
+        , Map.fromList [ ((0, 0), e00) :: ((Epoch, Bucket), ExtendedWrite)
+                       , ((0, 2), e02)
                        ]
         , Map.fromList [ ((0, 0), PointerWrite 24 undefined)
                        , ((0, 2), PointerWrite 12 undefined)
