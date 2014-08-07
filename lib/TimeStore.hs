@@ -13,11 +13,16 @@
 
 module TimeStore
 (
+    -- * Writing
     writeEncoded,
-    registerNamespace,
+    -- * Reading
+    readSimple,
     -- * Utility/internal
+    registerNamespace,
     isRegistered,
     fetchIndexes,
+
+    -- * Memory store (testing)
     MemoryStore,
     memoryStore,
     dumpMemoryStore,
@@ -39,9 +44,9 @@ import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
 import TimeStore.Stores.Memory
+import Pipes
 
-type Stream = ()
-
+-- | Check if a namespace is registered.
 isRegistered :: Store s => s -> NameSpace -> IO Bool
 isRegistered s ns = isJust <$> fetchIndexes s ns
 
@@ -158,6 +163,11 @@ indexEntry :: Word64 -> Word64 -> ByteString
 indexEntry epoch buckets =
     runPacking 16 (putWord64LE epoch >> putWord64LE buckets)
 
+-- | The latest files ensure that we do not "cut off" any data when rolling
+-- over to a new epoch (adding an entry to the index).
+--
+-- The epoch of the new entry in the index must be later than every point we
+-- have seen up to now, or data would be lost.
 updateLatest :: Store s => s
              -> NameSpace
              -> Tagged Simple Time
@@ -191,6 +201,8 @@ updateLatest s ns s_time e_time = withLock s ns "latest_update" $ do
     simpleLatest = "simple_latest"
     extendedLatest = "extended_latest"
 
+-- | Attempt to fetch and parse the simple and extended indexes from the data
+-- store.
 fetchIndexes :: Store s
              => s -> NameSpace
              -> IO (Maybe (Tagged Simple Index, Tagged Extended Index))
@@ -206,5 +218,8 @@ fetchIndexes s ns = do
         _ ->
             error "getIndexes: impossible"
 
-readAddrs :: Store s => s -> NameSpace -> [Address] -> IO Stream
-readAddrs = undefined
+-- | Request a range of simple points at the given addresses, returns a
+-- producer of chunks of points, each chunk is non-overlapping and ordered,
+-- each point within a chunk is also ordered.
+readSimple :: Store s => s -> NameSpace -> [Address] -> Producer ByteString IO ()
+readSimple = undefined

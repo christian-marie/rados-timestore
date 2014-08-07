@@ -132,15 +132,21 @@ data Extended
 -- Uninhabited wrapper for finding the location of a latest file.
 data LatestFile a
 
+-- This is where we store an incrementing "pointer" to the latest
+-- (chronologically) point we have ever seen.
 instance Nameable (LatestFile Simple) where
     name _ = "simple_latest"
 
 instance Nameable (LatestFile Extended) where
     name _ = "extended_latest"
 
+-- | An ObjectName represents a key for a store that can to be associated with
+-- data. They are unique within a NameSpace.
 newtype ObjectName = ObjectName { unObjectName :: ByteString }
   deriving (IsString)
 
+-- | The location of a bucket is calculated using the Epoch and Bucket. The
+-- bucket is calculated by (address mod max_buckets)
 newtype SimpleBucketLocation = SimpleBucketLocation (Epoch,Bucket)
 newtype ExtendeBucketLocation = ExtendedBucketLocation (Epoch,Bucket)
 
