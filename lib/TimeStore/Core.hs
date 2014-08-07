@@ -12,6 +12,7 @@
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 
 module TimeStore.Core
@@ -22,6 +23,9 @@ module TimeStore.Core
     LockName(..),
     Store(..),
     Point(..),
+    address,
+    time,
+    payload,
     NameSpace(..),
     Epoch(..),
     Address(..),
@@ -37,6 +41,7 @@ import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Exception
+import Control.Lens (makeLenses)
 import Data.Bits
 import Data.ByteString (ByteString)
 import Data.String (IsString)
@@ -125,14 +130,11 @@ data Extended
 -- Uninhabited wrapper for finding the location of a latest file.
 data LatestFile a
 
-
 instance Nameable (LatestFile Simple) where
     name _ = "simple_latest"
 
 instance Nameable (LatestFile Extended) where
     name _ = "extended_latest"
-
-
 
 newtype ObjectName = ObjectName { unObjectName :: ByteString }
   deriving (IsString)
@@ -171,10 +173,11 @@ newtype Time = Time {
   deriving (Eq, Num, Bounded, Ord, Show, Storable)
 
 data Point
-    = Point { address :: !Address
-            , time    :: !Time
-            , payload :: !Word64
+    = Point { _address :: !Address
+            , _time    :: !Time
+            , _payload :: !Word64
             } deriving (Show, Eq)
+makeLenses ''Point
 
 instance Storable Point where
     sizeOf _ = 24

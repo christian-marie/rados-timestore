@@ -21,6 +21,9 @@ library
   default-language:  Haskell2010
 
   exposed-modules:   TimeStore
+  other-modules:     TimeStore.Core,
+                     TimeStore.Index,
+                     TimeStore.Algorithms
   build-depends:     base >=3 && <5,
                      bytestring,
                      packer,
@@ -51,6 +54,7 @@ test-suite           unit-tests
                      TimeStore.Algorithms
   build-depends:     base >=3 && <5,
                      hspec,
+                     QuickCheck,
                      bytestring,
                      vector,
                      lens,
