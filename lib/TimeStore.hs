@@ -40,11 +40,11 @@ import Data.Monoid
 import Data.Packer
 import Data.Tagged
 import Data.Word (Word64)
+import Pipes
 import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
 import TimeStore.Stores.Memory
-import Pipes
 
 -- | Check if a namespace is registered.
 isRegistered :: Store s => s -> NameSpace -> IO Bool
@@ -150,8 +150,8 @@ maybeRollover :: (Nameable (Tagged a Index), Store s)
               -> Tagged a Index
               -> IO ()
 maybeRollover s ns bucket_threshold offsets (Tagged (Time latest)) idx = do
-    let (epoch', Bucket buckets) = indexLookup maxBound (untag idx)
-    let wr_fld = maximumOf (ifolded . indices ((== epoch') . fst)) offsets
+    let (epoch, Bucket buckets) = indexLookup maxBound (untag idx)
+    let wr_fld = maximumOf (ifolded . indices ((== epoch) . fst)) offsets
     case wr_fld of
         Just max_wr ->
             when (max_wr > bucket_threshold)
@@ -177,8 +177,8 @@ updateLatest s ns s_time e_time = withLock s ns "latest_update" $ do
     latests <- fetchs s ns [simpleLatest, extendedLatest]
     case latests & traversed . traversed %~ parse of
         [Just s_latest, Just e_latest] -> do
-            write s ns $ mkWrite s_latest s_time
-                       ++ mkWrite e_latest e_time
+            write s ns $ maybeWrite s_latest s_time
+                       ++ maybeWrite e_latest e_time
             return (max' s_latest s_time, max' e_latest e_time)
         [Nothing, Nothing] -> do
             -- First write
@@ -191,15 +191,17 @@ updateLatest s ns s_time e_time = withLock s ns "latest_update" $ do
     max' :: Word64 -> Tagged a Time -> Tagged a Time
     max' a (Tagged (Time b)) = Tagged . Time $ max a b
 
-    mkWrite :: forall a. Nameable (LatestFile a)
-            => Word64 -> Tagged a Time -> [(ObjectName, ByteString)]
-    mkWrite latest (Tagged (Time t)) =
-        [(name (undefined :: LatestFile a), pack t) | latest < t]
+    -- | Only want to write if the new time is later than the existing one.
+    maybeWrite :: forall a. Nameable (LatestFile a)
+               => Word64 -> Tagged a Time -> [(ObjectName, ByteString)]
+    maybeWrite latest (Tagged (Time t)) =
+        [(name (LatestFile :: LatestFile a), pack t) | latest < t]
 
     pack x = runPacking 8 (putWord64LE x)
     parse = runUnpacking getWord64LE
-    simpleLatest = "simple_latest"
-    extendedLatest = "extended_latest"
+
+    simpleLatest = name (LatestFile :: LatestFile Simple)
+    extendedLatest = name (LatestFile :: LatestFile Extended)
 
 -- | Attempt to fetch and parse the simple and extended indexes from the data
 -- store.
@@ -222,4 +224,4 @@ fetchIndexes s ns = do
 -- producer of chunks of points, each chunk is non-overlapping and ordered,
 -- each point within a chunk is also ordered.
 readSimple :: Store s => s -> NameSpace -> [Address] -> Producer ByteString IO ()
-readSimple = undefined
+readSimple s ns addrs = undefined

@@ -69,9 +69,9 @@ index = iso byteStringToIndex indexToByteString
 
 locationLookup :: Time -> Address -> Index -> (Epoch, Bucket)
 locationLookup t (Address addr) ix =
-    let (epoch', Bucket max_bucket) = indexLookup t ix
-        bucket' = Bucket $ (addr `clearBit` 0) `mod` max_bucket
-    in (epoch', bucket')
+    let (epoch, Bucket max_bucket) = indexLookup t ix
+        bucket = Bucket $ (addr `clearBit` 0) `mod` max_bucket
+    in (epoch, bucket)
 
 indexLookup :: Time -> Index -> (Epoch, Bucket)
 indexLookup t ix = fst (splitRemainder t ix)

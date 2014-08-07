@@ -30,7 +30,7 @@ module TimeStore.Core
     Epoch(..),
     Address(..),
     Time(..),
-    LatestFile,
+    LatestFile(..),
     Simple,
     Extended,
     SimpleBucketLocation(..),
@@ -130,7 +130,7 @@ data Simple
 data Extended
 
 -- Uninhabited wrapper for finding the location of a latest file.
-data LatestFile a
+data LatestFile a = LatestFile
 
 -- This is where we store an incrementing "pointer" to the latest
 -- (chronologically) point we have ever seen.
