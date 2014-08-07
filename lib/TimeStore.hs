@@ -56,7 +56,7 @@ registerNamespace s ns buckets = do
                     , ( name (undefined :: Tagged Extended Index)
                       , indexEntry 0 buckets)
                     ]
-    
+
 
 -- | Write a mixed blob of points to the supplied store and namespace.
 writeEncoded :: Store s => s -> NameSpace -> Word64 -> ByteString -> IO ()

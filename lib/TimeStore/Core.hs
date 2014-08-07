@@ -44,7 +44,7 @@ import Control.Exception
 import Control.Lens (makeLenses)
 import Data.Bits
 import Data.ByteString (ByteString)
-import Text.Printf
+import qualified Data.ByteString.Char8 as S
 import Data.String (IsString)
 import Data.Tagged
 import Data.Word (Word64)
@@ -52,7 +52,7 @@ import Foreign.Ptr
 import Foreign.Storable
 import qualified Pipes.Prelude as Pipes
 import System.Posix.Signals
-import qualified Data.ByteString.Char8 as S
+import Text.Printf
 
 -- | A concrete implementation of a storage backend for a time store.
 --

@@ -33,9 +33,9 @@ import Data.Packer
 import Data.String (IsString)
 import Data.Tagged
 import Data.Word (Word64)
+import Hexdump
 import TimeStore.Core
 import TimeStore.Index
-import Hexdump
 
 -- | The data portion of extended points. For each entry into this write, there
 -- will be a corresponding pointer from a SimpleWrite.
