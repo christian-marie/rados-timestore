@@ -26,6 +26,7 @@ import Data.String
 import Data.Tagged
 import Data.Vector.Storable.ByteString (vectorToByteString)
 import Data.Word (Word64)
+import qualified Pipes.Prelude as Pipes
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
@@ -92,8 +93,19 @@ main =
             describe "writeEncoded" $
                 it "mixed blob writes expected buckets" writeEncodedBlob
 
+            describe "readSmple" $
+                it "reads simple points correctly" readSimplePoints
+
 testNS :: NameSpace
 testNS = "PONIES"
+
+readSimplePoints :: Expectation
+readSimplePoints = do
+    s <- memoryStore
+    registerNamespace s testNS 10 20
+    writeEncoded s testNS 0 (simplePoints <> extendedPoints)
+    ps <- Pipes.toListM (readSimple s testNS 0 4 [2])
+    print ps
 
 registerWritesIndex :: Expectation
 registerWritesIndex = do
@@ -228,8 +240,9 @@ e02 = fromString . concat $
     , "pony"                             -- Payload
     ]
 
-writeToLazy :: SimpleWrite -> L.ByteString
-writeToLazy = toLazyByteString . unSimpleWrite
+writeLazyIso :: Iso' SimpleWrite L.ByteString
+writeLazyIso = iso (toLazyByteString . unSimpleWrite)
+                   (SimpleWrite . lazyByteString)
 
 groupExtended :: Expectation
 groupExtended = do
@@ -244,8 +257,8 @@ groupExtended = do
 
     simpleWrites :: Map (Epoch, Bucket) L.ByteString
     simpleWrites =
-        Map.fromList [ ((0,0), writeToLazy p00 )
-                     , ((0,2), writeToLazy p02 )
+        Map.fromList [ ((0,0), p00 ^. writeLazyIso)
+                     , ((0,2), p02 ^. writeLazyIso)
                      ]
     grouped =
         ( mempty

@@ -29,7 +29,8 @@ module TimeStore
 ) where
 
 import Control.Applicative
-import Control.Lens hiding (Index, Simple, index)
+import Control.Exception
+import Control.Lens hiding (Index, Simple, each, index)
 import Control.Monad
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (toLazyByteString)
@@ -75,9 +76,9 @@ writeEncoded :: Store s => s -> NameSpace -> Word64 -> ByteString -> IO ()
 writeEncoded s ns bucket_threshold encoded =
     withLock s ns "write_lock" $ do
         -- Grab the latest index.
-        --
-        -- TODO: Proper exception.
-        (s_idx, e_idx) <- fromMaybe (error "Invalid namespace") <$> fetchIndexes s ns
+        (s_idx, e_idx) <- mustFetchIndexes s ns
+
+        -- Collate points into epochs and buckets
         let (s_writes, e_writes, p_writes,
              s_latest, e_latest) = groupMixed s_idx e_idx encoded
 
@@ -220,8 +221,30 @@ fetchIndexes s ns = do
         _ ->
             error "getIndexes: impossible"
 
+mustFetchIndexes :: Store s
+                 => s
+                 -> NameSpace
+                 -> IO (Tagged Simple Index, Tagged Extended Index)
+mustFetchIndexes s ns =
+    fetchIndexes s ns >>= \x -> case x of
+        Just y  -> return y
+        Nothing -> throwIO (userError "Invalid namespace")
+
+
 -- | Request a range of simple points at the given addresses, returns a
 -- producer of chunks of points, each chunk is non-overlapping and ordered,
 -- each point within a chunk is also ordered.
-readSimple :: Store s => s -> NameSpace -> [Address] -> Producer ByteString IO ()
-readSimple s ns addrs = undefined
+readSimple :: Store s
+           => s
+           -> NameSpace
+           -> Time
+           -> Time
+           -> [Address]
+           -> Producer ByteString IO ()
+readSimple s ns start end addrs = do
+    (Tagged s_ix, _) <- lift (mustFetchIndexes s ns)
+    let range = rangeLookup start end s_ix
+    each range >-> forever (await >>= stream)
+  where
+    stream (epoch, bucket) = do
+        yield "hai"
