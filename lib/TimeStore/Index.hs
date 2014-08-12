@@ -24,7 +24,6 @@ module TimeStore.Index
 
 import Control.Applicative
 import Control.Lens (Iso', iso, itraverse_)
-import Data.Bits
 import Data.ByteString (ByteString)
 import Data.List
 import Data.Map (Map)
@@ -70,10 +69,9 @@ index = iso byteStringToIndex indexToByteString
 
 -- | Given a time and address, place a point in an epoch and bucket.
 locationLookup :: Time -> Address -> Index -> (Epoch, Bucket)
-locationLookup t (Address addr) ix =
-    let (epoch, Bucket max_bucket) = indexLookup t ix
-        bucket = Bucket $ (addr `clearBit` 0) `mod` max_bucket
-    in (epoch, bucket)
+locationLookup t addr ix =
+    let (epoch, max_bucket) = indexLookup t ix
+    in (epoch, simpleBucket max_bucket addr)
 
 indexLookup :: Time -> Index -> (Epoch, Bucket)
 indexLookup t ix = fst (splitRemainder t ix)

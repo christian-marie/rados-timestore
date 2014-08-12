@@ -104,8 +104,11 @@ readSimplePoints = do
     s <- memoryStore
     registerNamespace s testNS 10 20
     writeEncoded s testNS 0 (simplePoints <> extendedPoints)
-    ps <- Pipes.toListM (readSimple s testNS 0 4 [2])
-    print ps
+    writeEncoded s testNS 0 extraSimples
+
+    dumpMemoryStore s >>= putStrLn
+    ps <- Pipes.toListM (readSimple s testNS 0 21 [2])
+    ps `shouldBe` [vectorToByteString [Point 2 2 0]]
 
 registerWritesIndex :: Expectation
 registerWritesIndex = do
@@ -273,12 +276,31 @@ groupExtended = do
         )
 
 simplePoints :: ByteString
-simplePoints = vectorToByteString [Point 0 0 0, Point 2 2 0, Point 4 4 0, Point 8 8 0]
+simplePoints =
+    vectorToByteString [ Point 0 0 0
+                       , Point 2 2 0
+                       , Point 4 4 0
+                       , Point 8 8 0
+                       ]
+
+-- Used for testing rollovers, sent in a different packet to simplePoints.
+extraSimples :: ByteString
+extraSimples =
+    vectorToByteString [ Point 0 10 0, 
+                         Point 4 20 0,
+                         Point 6 15 0
+                       ]
+    
 
 extendedPoints :: ByteString
-extendedPoints =  vectorToByteString [Point 1 1 3] <> "hai"
-               <> vectorToByteString [Point 1 2 5] <> "there"
-               <> vectorToByteString [Point 3 1 4] <> "pony"
+extendedPoints = vectorToByteString [Point 1 1 3] <> "hai"
+              <> vectorToByteString [Point 1 2 5] <> "there"
+              <> vectorToByteString [Point 3 1 4] <> "pony"
+
+
+extraExtendeds :: ByteString
+extraExtendeds = vectorToByteString [Point 1 8 3] <> "wat"
+
 
 simpleIndex :: Tagged Simple Index
 simpleIndex = Tagged [ (0, 4) :: (Epoch, Bucket)

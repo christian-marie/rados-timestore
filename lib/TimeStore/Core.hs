@@ -34,7 +34,8 @@ module TimeStore.Core
     Simple,
     Extended,
     SimpleBucketLocation(..),
-    ExtendeBucketLocation(..)
+    ExtendeBucketLocation(..),
+    simpleBucket
 ) where
 
 import Control.Applicative
@@ -143,7 +144,7 @@ instance Nameable (LatestFile Extended) where
 -- | An ObjectName represents a key for a store that can to be associated with
 -- data. They are unique within a NameSpace.
 newtype ObjectName = ObjectName { unObjectName :: ByteString }
-  deriving (IsString)
+  deriving (IsString, Show)
 
 -- | The location of a bucket is calculated using the Epoch and Bucket. The
 -- bucket is calculated by (address mod max_buckets)
@@ -206,3 +207,9 @@ instance Storable Point where
         poke (castPtr ptr) a
         poke (ptr `plusPtr` 8 ) t
         poke (ptr `plusPtr` 16 ) p
+
+-- | Given a maximum number of buckets to hash over, map a simple address to
+-- the corresponding simple bucket.
+simpleBucket :: Bucket -> Address -> Bucket
+simpleBucket (Bucket max_buckets) (Address addr) = 
+    Bucket $ (addr `clearBit` 0) `mod` max_buckets

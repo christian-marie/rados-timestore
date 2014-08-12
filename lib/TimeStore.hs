@@ -42,10 +42,12 @@ import Data.Packer
 import Data.Tagged
 import Data.Word (Word64)
 import Pipes
+import qualified Pipes.Prelude as P
 import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
 import TimeStore.Stores.Memory
+import Data.List(nub)
 
 -- | Check if a namespace is registered.
 isRegistered :: Store s => s -> NameSpace -> IO Bool
@@ -151,10 +153,13 @@ maybeRollover :: (Nameable (Tagged a Index), Store s)
               -> Tagged a Index
               -> IO ()
 maybeRollover s ns bucket_threshold offsets (Tagged (Time latest)) idx = do
+    -- We only want to roll over for the latest epoch, otherwise we would roll
+    -- over every time we wrote to an old (full) bucket.
     let (epoch, Bucket buckets) = indexLookup maxBound (untag idx)
     let wr_fld = maximumOf (ifolded . indices ((== epoch) . fst)) offsets
     case wr_fld of
         Just max_wr ->
+            -- We compare the largest offset (from a write) with the threshold.
             when (max_wr > bucket_threshold)
                  (append s ns [(name idx, indexEntry latest buckets)])
         _ ->
@@ -244,7 +249,53 @@ readSimple :: Store s
 readSimple s ns start end addrs = do
     (Tagged s_ix, _) <- lift (mustFetchIndexes s ns)
     let range = rangeLookup start end s_ix
-    each range >-> forever (await >>= stream)
+
+    -- Given a range of epochs to search through, we want to grap all of the
+    -- (Epoch, Bucket) tuples that which correspond to our addresses.
+    --
+    -- Achieving this is almost trivial, we just need to map mod over our
+    -- addresses with the number of buckets in each epoch taken into account.
+    -- We use the unique image of this function to grab all the buckets needed,
+    -- without having to request one bucket for each address individually.
+
+    let targets = foldr hashBuckets [] range
+    let objs = map (name . SimpleBucketLocation) targets
+    lift $ print objs
+
+    buffered 8 (each objs >-> P.mapM (fetch s ns)) -- Request buckets in batch.
+    >-> P.mapM (reifyFetch s)                      -- Load them into memory.
+    >-> P.concat                                   -- Just bs -> bs.
+    >-> P.map (filterSimple start end addrs)       -- Final processing.
   where
-    stream (epoch, bucket) = do
-        yield "hai"
+    hashBuckets (epoch, max_buckets) acc =
+        nub [(epoch, simpleBucket max_buckets a) | a <- addrs ] ++ acc 
+
+
+filterSimple :: Time
+                -> Time
+                -> [Address]
+                -> ByteString
+                -> ByteString
+filterSimple start end addr = id
+
+
+-- | Fill up a buffer before yielding any values, the buffer will be kept full
+-- until the underlying producer is done.
+buffered :: Monad m => Int -> Producer a m r -> Producer a m r
+buffered n = go []
+  where
+    go as prod =
+        if length as >= n
+            then do
+                yield (last as)
+                go (init as) prod
+            else do
+                x <- lift (next prod)
+                case x of
+                    Left r -> do
+                        mapM_ yield (reverse as)
+                        return r
+                    Right (a, rest) ->
+                        go (a:as) rest
+
+
