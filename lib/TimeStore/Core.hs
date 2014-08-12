@@ -182,7 +182,7 @@ newtype Epoch = Epoch { unEpoch :: Word64 }
 newtype Address = Address {
     unAddress :: Word64
 }
-  deriving (Eq, Num, Bounded, Bits, Show, Storable)
+  deriving (Eq, Ord, Num, Bounded, Bits, Show, Storable)
 
 newtype Time = Time {
     unTime :: Word64
@@ -195,6 +195,14 @@ data Point
             , _payload :: !Word64
             } deriving (Show, Eq)
 makeLenses ''Point
+
+instance Ord Point where
+    -- Compare time first, then address. This way we can de-deplicate by
+    -- comparing adjacent values.
+    compare (Point a t _) (Point a' t' _) =
+        case compare t t' of
+            EQ -> compare a a'
+            c  -> c
 
 instance Storable Point where
     sizeOf _ = 24

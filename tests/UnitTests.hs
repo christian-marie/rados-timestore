@@ -21,10 +21,13 @@ import Data.ByteString.Builder
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Map as Map
 import Data.Map.Strict (Map)
+import Pipes(Producer)
 import Data.Monoid
 import Data.String
+import Control.Monad
 import Data.Tagged
-import Data.Vector.Storable.ByteString (vectorToByteString)
+import Data.Vector.Storable.ByteString
+import Data.Vector.Storable(Vector)
 import Data.Word (Word64)
 import qualified Pipes.Prelude as Pipes
 import Test.Hspec
@@ -106,9 +109,21 @@ readSimplePoints = do
     writeEncoded s testNS 0 (simplePoints <> extendedPoints)
     writeEncoded s testNS 0 extraSimples
 
-    dumpMemoryStore s >>= putStrLn
     ps <- Pipes.toListM (readSimple s testNS 0 21 [2])
     ps `shouldBe` [vectorToByteString [Point 2 2 0]]
+
+    pipeToVec (readSimple s testNS 0 21 [2]) >>=
+        (`shouldBe` [[Point 2 2 0]])
+
+    pipeToVec (readSimple s testNS 0 21 [14, 4, 6, 8]) >>=
+        (`shouldBe` [ [Point 4 4 0]
+                    , [Point 8 8 0]
+                    , [Point 14 18 0, Point 4 20 0] -- mod 10
+                    , [Point 6 15 0]
+                    ])
+
+pipeToVec :: Monad m => Producer ByteString m () -> m [Vector Point]
+pipeToVec = liftM (map byteStringToVector) . Pipes.toListM
 
 registerWritesIndex :: Expectation
 registerWritesIndex = do
@@ -288,6 +303,7 @@ extraSimples :: ByteString
 extraSimples =
     vectorToByteString [ Point 0 10 0, 
                          Point 4 20 0,
+                         Point 14 18 0,
                          Point 6 15 0
                        ]
     

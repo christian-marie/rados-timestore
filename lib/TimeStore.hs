@@ -260,23 +260,14 @@ readSimple s ns start end addrs = do
 
     let targets = foldr hashBuckets [] range
     let objs = map (name . SimpleBucketLocation) targets
-    lift $ print objs
 
     buffered 8 (each objs >-> P.mapM (fetch s ns)) -- Request buckets in batch.
     >-> P.mapM (reifyFetch s)                      -- Load them into memory.
     >-> P.concat                                   -- Just bs -> bs.
-    >-> P.map (filterSimple start end addrs)       -- Final processing.
+    >-> P.map (processSimple start end addrs)       -- Final processing.
   where
     hashBuckets (epoch, max_buckets) acc =
         nub [(epoch, simpleBucket max_buckets a) | a <- addrs ] ++ acc 
-
-
-filterSimple :: Time
-                -> Time
-                -> [Address]
-                -> ByteString
-                -> ByteString
-filterSimple start end addr = id
 
 
 -- | Fill up a buffer before yielding any values, the buffer will be kept full

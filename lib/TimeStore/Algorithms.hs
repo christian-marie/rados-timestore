@@ -17,6 +17,7 @@ module TimeStore.Algorithms
     SimpleWrite(..),
     ExtendedWrite(..),
     PointerWrite(..),
+    processSimple,
 ) where
 
 import Control.Applicative
@@ -36,6 +37,15 @@ import Data.Word (Word64)
 import Hexdump
 import TimeStore.Core
 import TimeStore.Index
+import qualified Data.Vector.Storable as V
+import Data.Vector.Storable.ByteString
+import Data.Vector.Generic.Mutable(MVector)
+import qualified Data.Vector.Generic.Mutable as M
+import Control.Monad.Primitive(PrimMonad, PrimState)
+import Control.Monad
+import Control.Monad.ST (runST)
+
+import qualified Data.Vector.Algorithms.Merge as Merge
 
 -- | The data portion of extended points. For each entry into this write, there
 -- will be a corresponding pointer from a SimpleWrite.
@@ -167,8 +177,60 @@ parsePointAt os bs = flip runUnpacking bs $ do
           <*> (Time <$> getWord64LE)
           <*> getWord64LE
 
+-- | Read from the given offset len bytes, returning a builder of those bytes.
 getBuilderAt :: Word64 -> Word64 -> ByteString -> Builder
 getBuilderAt offset len bs = flip runUnpacking bs $ do
     unpackSetPosition (fromIntegral offset)
     byteString <$> getBytes (fromIntegral len)
 
+
+-- | Filter out points not within with the given criteria, then sort and
+-- de-duplicate.
+--
+-- O(n lg n)
+processSimple :: Time
+              -> Time
+              -> [Address]
+              -> ByteString
+              -> ByteString
+processSimple start end addr input = runST $ do
+    let v = V.filter (\(Point a t _) -> any (== a) addr
+                                     && t >= start
+                                     && t <= end)
+          . byteStringToVector $ input
+    mv <- V.thaw v
+    Merge.sort mv
+    vectorToByteString <$> (deDuplicate similar mv >>= V.freeze)
+
+-- | Is the address and time the same? We don't want to know about the payload
+-- for de-duplication.
+similar :: Point -> Point -> Bool
+similar (Point a t _) (Point a' t' _) =
+    a == a' && t == t'
+
+-- | Sort and de-duplicate elements. First element wins.
+deDuplicate :: (PrimMonad m, MVector v e, Ord e)
+            => (e -> e -> Bool)
+            -> v (PrimState m) e
+            -> m (v (PrimState m) e)
+deDuplicate cmp input
+    | M.null input = return input
+    | otherwise = do
+        first <- M.unsafeRead input 0
+        go input first 1 1 (M.length input)
+  where
+    go buf prev_elt read_ptr write_ptr len
+        | read_ptr == len = return $ M.take write_ptr buf
+        | otherwise = do
+            elt <- M.unsafeRead buf read_ptr
+
+            if elt `cmp` prev_elt
+                then
+                    go buf prev_elt (succ read_ptr) write_ptr len
+                else do
+                    -- This conditional is an optimization for non-duplicate
+                    -- data.
+                    when (write_ptr /= read_ptr) $
+                        M.unsafeWrite buf write_ptr elt
+
+                    go buf elt (succ read_ptr) (succ write_ptr) len
