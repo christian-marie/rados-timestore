@@ -35,6 +35,7 @@ import Control.Monad
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (toLazyByteString)
 import Data.ByteString.Lazy (toStrict)
+import Data.List (nub)
 import Data.Map.Strict (Map, unionWith)
 import Data.Maybe
 import Data.Monoid
@@ -47,7 +48,6 @@ import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
 import TimeStore.Stores.Memory
-import Data.List(nub)
 
 -- | Check if a namespace is registered.
 isRegistered :: Store s => s -> NameSpace -> IO Bool
@@ -267,7 +267,7 @@ readSimple s ns start end addrs = do
     >-> P.map (processSimple start end addrs)       -- Final processing.
   where
     hashBuckets (epoch, max_buckets) acc =
-        nub [(epoch, simpleBucket max_buckets a) | a <- addrs ] ++ acc 
+        nub [(epoch, simpleBucket max_buckets a) | a <- addrs ] ++ acc
 
 
 -- | Fill up a buffer before yielding any values, the buffer will be kept full

@@ -41,17 +41,14 @@ module TimeStore.Core
 import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Exception
 import Control.Lens (makeLenses)
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.String (IsString)
-import Data.Tagged
 import Data.Word (Word64)
 import Foreign.Ptr
 import Foreign.Storable
-import qualified Pipes.Prelude as Pipes
 import System.Posix.Signals
 import Text.Printf
 
@@ -219,5 +216,5 @@ instance Storable Point where
 -- | Given a maximum number of buckets to hash over, map a simple address to
 -- the corresponding simple bucket.
 simpleBucket :: Bucket -> Address -> Bucket
-simpleBucket (Bucket max_buckets) (Address addr) = 
+simpleBucket (Bucket max_buckets) (Address addr) =
     Bucket $ (addr `clearBit` 0) `mod` max_buckets

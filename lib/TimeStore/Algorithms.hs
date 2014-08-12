@@ -9,7 +9,7 @@
 
 {-# LANGUAGE BangPatterns               #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE NamedFieldPuns             #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 
 module TimeStore.Algorithms
 (
@@ -21,6 +21,9 @@ module TimeStore.Algorithms
 ) where
 
 import Control.Applicative
+import Control.Monad
+import Control.Monad.Primitive (PrimMonad, PrimState)
+import Control.Monad.ST (runST)
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
@@ -33,17 +36,14 @@ import Data.Monoid
 import Data.Packer
 import Data.String (IsString)
 import Data.Tagged
+import Data.Vector.Generic.Mutable (MVector)
+import qualified Data.Vector.Generic.Mutable as M
+import qualified Data.Vector.Storable as V
+import Data.Vector.Storable.ByteString
 import Data.Word (Word64)
 import Hexdump
 import TimeStore.Core
 import TimeStore.Index
-import qualified Data.Vector.Storable as V
-import Data.Vector.Storable.ByteString
-import Data.Vector.Generic.Mutable(MVector)
-import qualified Data.Vector.Generic.Mutable as M
-import Control.Monad.Primitive(PrimMonad, PrimState)
-import Control.Monad
-import Control.Monad.ST (runST)
 
 import qualified Data.Vector.Algorithms.Merge as Merge
 
@@ -194,7 +194,7 @@ processSimple :: Time
               -> ByteString
               -> ByteString
 processSimple start end addr input = runST $ do
-    let v = V.filter (\(Point a t _) -> any (== a) addr
+    let v = V.filter (\(Point a t _) -> elem a addr
                                      && t >= start
                                      && t <= end)
           . byteStringToVector $ input

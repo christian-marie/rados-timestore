@@ -14,6 +14,7 @@
 
 import Control.Applicative
 import Control.Lens hiding (Index, Simple, index)
+import Control.Monad
 import Data.Bits.Lens
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
@@ -21,14 +22,13 @@ import Data.ByteString.Builder
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Map as Map
 import Data.Map.Strict (Map)
-import Pipes(Producer)
 import Data.Monoid
 import Data.String
-import Control.Monad
 import Data.Tagged
+import Data.Vector.Storable (Vector)
 import Data.Vector.Storable.ByteString
-import Data.Vector.Storable(Vector)
 import Data.Word (Word64)
+import Pipes (Producer)
 import qualified Pipes.Prelude as Pipes
 import Test.Hspec
 import Test.Hspec.QuickCheck
@@ -301,12 +301,12 @@ simplePoints =
 -- Used for testing rollovers, sent in a different packet to simplePoints.
 extraSimples :: ByteString
 extraSimples =
-    vectorToByteString [ Point 0 10 0, 
+    vectorToByteString [ Point 0 10 0,
                          Point 4 20 0,
                          Point 14 18 0,
                          Point 6 15 0
                        ]
-    
+
 
 extendedPoints :: ByteString
 extendedPoints = vectorToByteString [Point 1 1 3] <> "hai"
