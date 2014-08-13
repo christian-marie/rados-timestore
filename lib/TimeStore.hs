@@ -50,6 +50,7 @@ import qualified Pipes.Prelude as P
 import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
+import qualified Data.ByteString as S
 import TimeStore.Stores.Memory
 
 -- | Check if a namespace is registered.
@@ -229,7 +230,6 @@ fetchIndexes s ns = do
         _ ->
             error "getIndexes: impossible"
 
--- | Fetch the index, throw an error if it isn't ther.
 mustFetchIndexes :: Store s
                  => s
                  -> NameSpace
@@ -253,7 +253,12 @@ readSimple :: Store s
 readSimple s ns start end addrs = do
     (Tagged s_ix, _) <- lift (mustFetchIndexes s ns)
     let objs = targetObjs s_ix start end addrs (name . SimpleBucketLocation)
-    readAhead s ns objs >-> P.map (processSimple start end addrs)
+
+    buffered readAhead (each objs >-> P.mapM (fetch s ns))
+    >-> P.mapM (reifyFetch s)                  -- Load buckets into memory.
+    >-> P.concat                               -- Just bs -> bs.
+    >-> P.map (processSimple start end addrs)  -- Final processing.
+    >-> P.filter (not . S.null)
 
 -- | Request a range of simple points at the given addresses, returns a
 -- producer of chunks of points, each chunk is non-overlapping and ordered,
@@ -266,9 +271,35 @@ readExtended :: Store s
            -> [Address]
            -> Producer ByteString IO ()
 readExtended s ns start end addrs = do
-    (_, Tagged e_ix) <- lift (mustFetchIndexes s ns)
-    let objs = targetObjs e_ix start end addrs (name . ExtendedBucketLocation)
-    readAhead s ns objs
+    (Tagged s_ix, Tagged e_ix) <- lift (mustFetchIndexes s ns)
+    let s_objs = targetObjs s_ix start end addrs (name . SimpleBucketLocation)
+    let e_objs = targetObjs e_ix start end addrs (name . ExtendedBucketLocation)
+
+    -- There's probably a nicer abstraction for zipping two pipes together, we
+    -- just use a tuple explicitly.
+    let objs = zip s_objs e_objs
+
+    buffered readAhead (each objs >-> P.mapM fetchBoth)
+    >-> P.mapM reifyBoth -- Load buckets into memory.
+    >-> P.mapM mustBoth  -- Ensure both or neither are there.
+    >-> P.concat         -- Maybe (s_bs,e_bs) -> (s_bs,e_bs.)
+    >-> P.map (uncurry (processExtended start end addrs))
+    >-> P.filter (not . S.null)
+  where
+    reifyBoth (x,y) =
+        liftA2 (,) (reifyFetch s x) (reifyFetch s y)
+
+    fetchBoth (x,y) =
+        liftA2 (,) (fetch s ns x) (fetch s ns y)
+
+    -- | Explode if one, but not the other bucket is there. Otherwise float the
+    -- Maybe out.
+    mustBoth :: (Maybe a, Maybe b) -> IO (Maybe (a, b))
+    mustBoth x =
+        case x of
+            (Just a, Just b) -> return $ Just (a,b)
+            (Nothing, Nothing) -> return Nothing
+            _ -> throwIO (userError "Expected both buckets or none")
 
 -- | Find the target object names for all given addresses within the range,
 -- indexed by the provided index.
@@ -298,23 +329,16 @@ targetObjs idx start end addrs name_f  =
     hashBuckets (epoch, max_buckets) acc =
         nub [(epoch, simpleBucket max_buckets a) | a <- addrs ] ++ acc
 
--- | Stream the provided objects out, whilst fetching a few ahead of time.
--- Empty buckets are ignored.
+-- How many buckets to fetch-ahead, we will want roughly this much memory *
+-- average block size.
 --
 -- This is a trade-off between memory use and latency for large sequential
 -- reads.
 --
 -- If each bucket is rougly 4MB, then this read ahead level (16) will try to
 -- read 4MB * 16 = 64MB ahead.
-readAhead :: Store s
-          => s
-          -> NameSpace
-          -> [ObjectName]
-          -> Producer ByteString IO ()
-readAhead s ns objs = 
-    buffered 16 (each objs >-> P.mapM (fetch s ns)) -- Request buckets
-    >-> P.mapM (reifyFetch s)                       -- Load them
-    >-> P.concat                                    -- Just bs -> bs
+readAhead :: Int
+readAhead = 16
 
 -- | Fill up a buffer before yielding any values, the buffer will be kept full
 -- until the underlying producer is done.

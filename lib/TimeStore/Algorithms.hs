@@ -18,6 +18,7 @@ module TimeStore.Algorithms
     ExtendedWrite(..),
     PointerWrite(..),
     processSimple,
+    processExtended,
 ) where
 
 import Control.Applicative
@@ -201,6 +202,35 @@ processSimple start end addr input = runST $ do
     mv <- V.thaw v
     Merge.sort mv
     vectorToByteString <$> (deDuplicate similar mv >>= V.freeze)
+
+-- | Given a simple and extended bucket, do the usual processing on the simple
+-- bucket, then grab the extended portions and merge the two together.
+processExtended :: Time
+                -> Time
+                -> [Address]
+                -> ByteString
+                -> ByteString
+                -> ByteString
+processExtended start end addrs s_bs e_bs =
+    L.toStrict
+    . toLazyByteString
+    . V.foldl' merge mempty
+    . byteStringToVector
+    $ processSimple start end addrs s_bs
+  where
+    merge acc (Point (Address a) (Time t) os) =
+        let bytes = runUnpacking (getExtendedBytes os) e_bs
+            bldr = word64LE a <> word64LE t <> byteString bytes
+        in acc <> bldr
+
+-- First word is the length, then the string. We return the length and the
+-- string as a string.
+getExtendedBytes :: Word64 -> Unpacking ByteString
+getExtendedBytes offset = do
+    unpackSetPosition (fromIntegral offset)
+    len <- getWord64LE
+    unpackSetPosition (fromIntegral offset)
+    getBytes (fromIntegral len + 8)
 
 -- | Is the address and time the same? We don't want to know about the payload
 -- for de-duplication.

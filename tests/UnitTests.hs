@@ -99,6 +99,10 @@ main =
             describe "readSmple" $
                 it "reads simple points correctly" readSimplePoints
 
+            describe "readExtended" $
+                it "reads extended points correctly" readExtendedPoints
+
+
 testNS :: NameSpace
 testNS = "PONIES"
 
@@ -106,11 +110,14 @@ readSimplePoints :: Expectation
 readSimplePoints = do
     s <- memoryStore
     registerNamespace s testNS 10 20
-    writeEncoded s testNS 0 (simplePoints <> extendedPoints)
+    writeEncoded s testNS 0 simplePoints
     writeEncoded s testNS 0 extraSimples
 
-    ps <- Pipes.toListM (readSimple s testNS 0 21 [2])
-    ps `shouldBe` [vectorToByteString [Point 2 2 0]]
+    pipeToVec (readSimple s testNS 0 21 []) >>=
+        (`shouldBe` [])
+
+    pipeToVec (readSimple s testNS 0 21 [2]) >>=
+        (`shouldBe` [[Point 2 2 0]])
 
     pipeToVec (readSimple s testNS 0 21 [2]) >>=
         (`shouldBe` [[Point 2 2 0]])
@@ -121,6 +128,27 @@ readSimplePoints = do
                     , [Point 14 18 0, Point 4 20 0] -- mod 10
                     , [Point 6 15 0]
                     ])
+
+readExtendedPoints :: Expectation
+readExtendedPoints = do
+    s <- memoryStore
+    registerNamespace s testNS 5 10
+    writeEncoded s testNS 0 extendedPoints
+
+    Pipes.toListM (readExtended s testNS 0 21 []) >>= 
+        (`shouldBe` [])
+
+    Pipes.toListM (readExtended s testNS 0 21 [1]) >>= 
+        (`shouldBe` [expected1])
+
+    Pipes.toListM (readExtended s testNS 0 21 [1, 3]) >>= 
+        (`shouldBe` [expected1, expected2])
+  where
+    expected1 = vectorToByteString [Point 1 1 3] <> "hai"
+             <> vectorToByteString [Point 1 2 5] <> "there"
+
+    expected2 = vectorToByteString [Point 3 1 4] <> "pony"
+
 
 pipeToVec :: Monad m => Producer ByteString m () -> m [Vector Point]
 pipeToVec = liftM (map byteStringToVector) . Pipes.toListM
