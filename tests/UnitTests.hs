@@ -135,13 +135,13 @@ readExtendedPoints = do
     registerNamespace s testNS 5 10
     writeEncoded s testNS 0 extendedPoints
 
-    Pipes.toListM (readExtended s testNS 0 21 []) >>= 
+    Pipes.toListM (readExtended s testNS 0 21 []) >>=
         (`shouldBe` [])
 
-    Pipes.toListM (readExtended s testNS 0 21 [1]) >>= 
+    Pipes.toListM (readExtended s testNS 0 21 [1]) >>=
         (`shouldBe` [expected1])
 
-    Pipes.toListM (readExtended s testNS 0 21 [1, 3]) >>= 
+    Pipes.toListM (readExtended s testNS 0 21 [1, 3]) >>=
         (`shouldBe` [expected1, expected2])
   where
     expected1 = vectorToByteString [Point 1 1 3] <> "hai"

@@ -36,6 +36,7 @@ import Control.Exception
 import Control.Lens hiding (Index, Simple, each, index)
 import Control.Monad
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as S
 import Data.ByteString.Builder (toLazyByteString)
 import Data.ByteString.Lazy (toStrict)
 import Data.List (nub)
@@ -50,7 +51,6 @@ import qualified Pipes.Prelude as P
 import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
-import qualified Data.ByteString as S
 import TimeStore.Stores.Memory
 
 -- | Check if a namespace is registered.
