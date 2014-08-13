@@ -15,8 +15,11 @@ module TimeStore
 (
     -- * Writing
     writeEncoded,
+
     -- * Reading
     readSimple,
+    readExtended,
+
     -- * Utility/internal
     registerNamespace,
     isRegistered,
@@ -226,6 +229,7 @@ fetchIndexes s ns = do
         _ ->
             error "getIndexes: impossible"
 
+-- | Fetch the index, throw an error if it isn't ther.
 mustFetchIndexes :: Store s
                  => s
                  -> NameSpace
@@ -248,27 +252,69 @@ readSimple :: Store s
            -> Producer ByteString IO ()
 readSimple s ns start end addrs = do
     (Tagged s_ix, _) <- lift (mustFetchIndexes s ns)
-    let range = rangeLookup start end s_ix
+    let objs = targetObjs s_ix start end addrs (name . SimpleBucketLocation)
+    readAhead s ns objs >-> P.map (processSimple start end addrs)
 
-    -- Given a range of epochs to search through, we want to grap all of the
-    -- (Epoch, Bucket) tuples that which correspond to our addresses.
+-- | Request a range of simple points at the given addresses, returns a
+-- producer of chunks of points, each chunk is non-overlapping and ordered,
+-- each point within a chunk is also ordered.
+readExtended :: Store s
+           => s
+           -> NameSpace
+           -> Time
+           -> Time
+           -> [Address]
+           -> Producer ByteString IO ()
+readExtended s ns start end addrs = do
+    (_, Tagged e_ix) <- lift (mustFetchIndexes s ns)
+    let objs = targetObjs e_ix start end addrs (name . ExtendedBucketLocation)
+    readAhead s ns objs
+
+-- | Find the target object names for all given addresses within the range,
+-- indexed by the provided index.
+targetObjs :: Index
+           -> Time
+           -> Time
+           -> [Address]
+           -> ((Epoch, Bucket) -> ObjectName)
+           -> [ObjectName]
+targetObjs idx start end addrs name_f  =
+    -- We look up the Epoch and number of Buckets within the time range.
+    let range = rangeLookup start end idx
+
+    -- Given a range of Epoch to search through, we want to grap all of the
+    -- (Epoch, Bucket) tuples that which correspond to our addresses, which
+    -- will give us the destination bucket names.
     --
     -- Achieving this is almost trivial, we just need to map mod over our
     -- addresses with the number of buckets in each epoch taken into account.
     -- We use the unique image of this function to grab all the buckets needed,
     -- without having to request one bucket for each address individually.
+        targets = foldr hashBuckets [] range
+     in
+        map name_f targets
 
-    let targets = foldr hashBuckets [] range
-    let objs = map (name . SimpleBucketLocation) targets
-
-    buffered 8 (each objs >-> P.mapM (fetch s ns)) -- Request buckets in batch.
-    >-> P.mapM (reifyFetch s)                      -- Load them into memory.
-    >-> P.concat                                   -- Just bs -> bs.
-    >-> P.map (processSimple start end addrs)       -- Final processing.
   where
     hashBuckets (epoch, max_buckets) acc =
         nub [(epoch, simpleBucket max_buckets a) | a <- addrs ] ++ acc
 
+-- | Stream the provided objects out, whilst fetching a few ahead of time.
+-- Empty buckets are ignored.
+--
+-- This is a trade-off between memory use and latency for large sequential
+-- reads.
+--
+-- If each bucket is rougly 4MB, then this read ahead level (16) will try to
+-- read 4MB * 16 = 64MB ahead.
+readAhead :: Store s
+          => s
+          -> NameSpace
+          -> [ObjectName]
+          -> Producer ByteString IO ()
+readAhead s ns objs = 
+    buffered 16 (each objs >-> P.mapM (fetch s ns)) -- Request buckets
+    >-> P.mapM (reifyFetch s)                       -- Load them
+    >-> P.concat                                    -- Just bs -> bs
 
 -- | Fill up a buffer before yielding any values, the buffer will be kept full
 -- until the underlying producer is done.
