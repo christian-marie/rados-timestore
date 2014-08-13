@@ -43,6 +43,7 @@ import Data.List (nub)
 import Data.Map.Strict (Map, unionWith)
 import Data.Maybe
 import Data.Monoid
+import Data.Tuple.Sequence(sequenceT)
 import Data.Packer
 import Data.Tagged
 import Data.Word (Word64)
@@ -281,7 +282,7 @@ readExtended s ns start end addrs = do
 
     buffered readAhead (each objs >-> P.mapM fetchBoth)
     >-> P.mapM reifyBoth -- Load buckets into memory.
-    >-> P.mapM mustBoth  -- Ensure both or neither are there.
+    >-> P.map sequenceT  -- Ensure both or neither are there.
     >-> P.concat         -- Maybe (s_bs,e_bs) -> (s_bs,e_bs.)
     >-> P.map (uncurry (processExtended start end addrs))
     >-> P.filter (not . S.null)
@@ -291,15 +292,6 @@ readExtended s ns start end addrs = do
 
     fetchBoth (x,y) =
         liftA2 (,) (fetch s ns x) (fetch s ns y)
-
-    -- | Explode if one, but not the other bucket is there. Otherwise float the
-    -- Maybe out.
-    mustBoth :: (Maybe a, Maybe b) -> IO (Maybe (a, b))
-    mustBoth x =
-        case x of
-            (Just a, Just b) -> return $ Just (a,b)
-            (Nothing, Nothing) -> return Nothing
-            _ -> throwIO (userError "Expected both buckets or none")
 
 -- | Find the target object names for all given addresses within the range,
 -- indexed by the provided index.
