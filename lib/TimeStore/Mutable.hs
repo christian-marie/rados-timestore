@@ -14,7 +14,7 @@
 --
 -- This module is intended to be imported qualified.
 --
-module TimeStore.Updateable
+module TimeStore.Mutable
 (
     lookup,
     insert,

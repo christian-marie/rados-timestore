@@ -37,6 +37,7 @@ import TimeStore
 import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
+import qualified TimeStore.Mutable as MutableTS
 
 newtype MixedPayload = MixedPayload { unMixedPayload :: ByteString }
   deriving (Eq, Show)
@@ -89,7 +90,7 @@ main =
             it "groups extended points" groupExtended
             prop "group arbitrary valid points" propGroups
 
-        describe "user api" $ do
+        describe "main api" $ do
             describe "registerOrigin" $
                 it "writes index files out" registerWritesIndex
 
@@ -102,6 +103,21 @@ main =
             describe "readExtended" $
                 it "reads extended points correctly" readExtendedPoints
 
+        describe "mutable API" $
+            describe "insert/lookup" $
+                it "overwrites and reads" overwriteThenReadMutable
+
+overwriteThenReadMutable :: Expectation
+overwriteThenReadMutable = do
+    s <- memoryStore
+    registerNamespace s testNS 3 2
+
+    MutableTS.lookup s testNS 0 >>=
+        (`shouldBe` Nothing)
+    MutableTS.insert s testNS 0 "Hi."
+    MutableTS.insert s testNS 0 "I'm a duck"
+    MutableTS.lookup s testNS 0 >>=
+        (`shouldBe` Just "I'm a duck")
 
 testNS :: NameSpace
 testNS = "PONIES"
