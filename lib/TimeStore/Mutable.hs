@@ -25,20 +25,20 @@ module TimeStore.Mutable
 ) where
 
 import Control.Applicative
+import Control.Lens hiding (Index, Simple, each, index)
 import Control.Monad
 import Data.Bits
-import Control.Lens hiding (Index, Simple, index, each)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import Data.Monoid
 import Data.Packer
+import Data.Tuple.Sequence
 import Pipes hiding (enumerate)
 import qualified Pipes.Prelude as P
 import Prelude hiding (lookup, mapM)
 import TimeStore
 import TimeStore.Algorithms
 import TimeStore.Core
-import Data.Tuple.Sequence
 import TimeStore.StoreHelpers
 
 -- | I heard you like namespaces so I put a _ in your namespace so you can

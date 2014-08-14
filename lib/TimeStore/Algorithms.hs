@@ -32,6 +32,7 @@ import qualified Data.ByteString as S
 import Data.ByteString.Builder (Builder, byteString, toLazyByteString,
                                 word64LE)
 import qualified Data.ByteString.Lazy.Char8 as L
+import Data.Function (on)
 import qualified Data.Map as Map
 import Data.Map.Strict (Map)
 import Data.Monoid
@@ -46,7 +47,6 @@ import Data.Word (Word64)
 import Hexdump
 import TimeStore.Core
 import TimeStore.Index
-import Data.Function(on)
 
 import qualified Data.Vector.Algorithms.Merge as Merge
 
@@ -224,7 +224,7 @@ processExtended start end addrs s_bs e_bs =
     mergeExtended e_bs $ processSimple start end addrs s_bs
 
 mergeExtended :: ByteString -> ByteString -> ByteString
-mergeExtended e_bs = 
+mergeExtended e_bs =
     L.toStrict
     . toLazyByteString
     . V.foldl' merge mempty

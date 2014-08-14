@@ -6,8 +6,8 @@
 -- you can redistribute it and/or modify it under the terms of
 -- the 3-clause BSD licence.
 --
-{-# LANGUAGE OverloadedLists            #-}
-{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE OverloadedLists   #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 import Control.Lens hiding (Index, Simple, index)
 import Control.Monad

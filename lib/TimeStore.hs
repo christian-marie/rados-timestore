@@ -41,6 +41,7 @@ module TimeStore
 import Control.Applicative
 import Control.Lens hiding (Index, Simple, each, index)
 import Control.Monad
+import Data.Bitraversable
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
@@ -59,7 +60,6 @@ import TimeStore.Core
 import TimeStore.Index
 import TimeStore.StoreHelpers
 import TimeStore.Stores.Memory
-import Data.Bitraversable
 
 -- | Check if a namespace is registered.
 isRegistered :: Store s => s -> NameSpace -> IO Bool
