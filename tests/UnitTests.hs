@@ -6,18 +6,12 @@
 -- you can redistribute it and/or modify it under the terms of
 -- the 3-clause BSD licence.
 --
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedLists            #-}
 {-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE StandaloneDeriving         #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
-import Control.Applicative
 import Control.Lens hiding (Index, Simple, index)
 import Control.Monad
-import Data.Bits.Lens
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as S
 import Data.ByteString.Builder
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Map as Map
@@ -31,56 +25,11 @@ import Data.Word (Word64)
 import Pipes (Producer)
 import qualified Pipes.Prelude as Pipes
 import Test.Hspec
-import Test.Hspec.QuickCheck
-import Test.QuickCheck
 import TimeStore
 import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
 import qualified TimeStore.Mutable as MutableTS
-
-newtype MixedPayload = MixedPayload { unMixedPayload :: ByteString }
-  deriving (Eq, Show)
-
-newtype ExtendedPoint = ExtendedPoint { unExtendedPoint :: ByteString }
-  deriving (Eq, Show)
-
-newtype SimplePoint = SimplePoint { unSimplePoint :: ByteString }
-
-instance Arbitrary MixedPayload where
-    arbitrary = do
-        len <- (`mod` 1024) . abs <$> arbitrary
-        MixedPayload . L.toStrict . L.fromChunks <$> go [] len
-      where
-        go :: [ByteString] -> Int -> Gen [ByteString]
-        go xs 0 = return xs
-        go xs n = do
-            p <- arbitrary
-            case p of
-                Left  (ExtendedPoint x) -> go (x:xs) (pred n)
-                Right (SimplePoint x)   -> go (x:xs) (pred n)
-
-deriving instance Arbitrary Address
-deriving instance Arbitrary Time
-
-instance Arbitrary Point where
-    arbitrary =
-        Point <$> arbitrary <*> arbitrary <*> arbitrary
-
-instance Arbitrary ExtendedPoint where
-    arbitrary = do
-        p <- arbitrary
-        let p'@(Point _ _ len) = p & address . bitAt 0 .~ True
-                                   & payload .&.~ 0xff
-
-        -- This is kind of slow
-        pl <- S.pack <$> vectorOf (fromIntegral len) arbitrary
-        return . ExtendedPoint $ vectorToByteString [p'] <> pl
-
-instance Arbitrary SimplePoint where
-    arbitrary = do
-        p <- liftA (address . bitAt 0 .~ False) arbitrary
-        return . SimplePoint $ vectorToByteString [p]
 
 main :: IO ()
 main =
@@ -88,7 +37,6 @@ main =
         describe "algorithms" $ do
             it "groups simple points" groupSimple
             it "groups extended points" groupExtended
-            prop "group arbitrary valid points" propGroups
 
         describe "main api" $ do
             describe "registerOrigin" $
@@ -218,16 +166,6 @@ writeEncodedBlob = do
             e_last `shouldBe` "\x02\x00\00\x00\x00\x00\x00\x00"
         _ ->
             error "failed to fetch one of the buckets" -- have fun finding it
-
-propGroups :: MixedPayload -> Bool
-propGroups (MixedPayload x) =  do
-    let (_, _, _,
-         Tagged s_max, Tagged e_max) = groupMixed simpleIndex extendedIndex x
-    -- There is only one invariant I can think of given no knowledge of
-    -- incoming data. The simple max should be less than or equal to the
-    -- extended max. This is because adding an extended point will add a
-    -- pointer to the simple bucket.
-    e_max <= s_max
 
 groupSimple :: Expectation
 groupSimple =
