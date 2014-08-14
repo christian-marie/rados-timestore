@@ -35,7 +35,7 @@ module TimeStore.Core
     Extended,
     SimpleBucketLocation(..),
     ExtendeBucketLocation(..),
-    simpleBucket
+    placeBucket
 ) where
 
 import Control.Applicative
@@ -66,6 +66,12 @@ import Text.Printf
 class Store s where
     type FetchFuture :: *
     type SizeFuture :: *
+
+    -- | Get the rollover threshould for a given store and namespace. This is
+    -- the minumum size that a bucket should be in order for us to select a new
+    -- epoch. Default is 4MB.
+    rolloverThreshold :: s -> NameSpace -> Word64
+    rolloverThreshold _ _ = 2 ^ (20 :: Word64) * 4
 
     -- | Append to a series of buckets, each append is atomic
     append :: s -> NameSpace -> [(ObjectName,ByteString)] -> IO ()
@@ -184,7 +190,7 @@ newtype Address = Address {
 newtype Time = Time {
     unTime :: Word64
 }
-  deriving (Eq, Num, Bounded, Ord, Show, Storable)
+  deriving (Eq, Num, Bounded, Ord, Show, Storable, Enum)
 
 data Point
     = Point { _address :: !Address
@@ -213,8 +219,8 @@ instance Storable Point where
         poke (ptr `plusPtr` 8 ) t
         poke (ptr `plusPtr` 16 ) p
 
--- | Given a maximum number of buckets to hash over, map a simple address to
--- the corresponding simple bucket.
-simpleBucket :: Bucket -> Address -> Bucket
-simpleBucket (Bucket max_buckets) (Address addr) =
+-- | Given a maximum number of buckets to hash over, map an address to the
+-- corresponding bucket within the epoch.
+placeBucket :: Bucket -> Address -> Bucket
+placeBucket (Bucket max_buckets) (Address addr) =
     Bucket $ (addr `clearBit` 0) `mod` max_buckets

@@ -143,7 +143,8 @@ groupMixed (Tagged s_idx) (Tagged e_idx) input = go mempty mempty mempty (Tagged
 
                     let e_wr = ExtendedWrite (word64LE len <> e_bytes)
                     let e_loc = locationLookup t addr e_idx
-                    let e_map' = Map.insertWith (flip mappend) e_loc e_wr e_map
+
+                    let e_map' =  Map.insertWith (flip mappend) e_loc e_wr e_map
                     -- This pointer will reference the extended write now.
                     let f = PointerWrite (len + 8) (makePointer e_loc addr t)
                     -- Insert pointer closure into the pointer map (grouped by

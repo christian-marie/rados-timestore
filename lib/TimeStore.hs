@@ -8,13 +8,21 @@
 --
 
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE OverloadedLists     #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module TimeStore
 (
+    -- * Types
+    Time(..),
+    Address(..),
+    NameSpace(..),
+    Store(..),
+
     -- * Writing
     writeEncoded,
+    writeExtended,
 
     -- * Reading
     readSimple,
@@ -35,6 +43,7 @@ import Control.Applicative
 import Control.Exception
 import Control.Lens hiding (Index, Simple, each, index)
 import Control.Monad
+import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import Data.ByteString.Builder (toLazyByteString)
@@ -43,9 +52,10 @@ import Data.List (nub)
 import Data.Map.Strict (Map, unionWith)
 import Data.Maybe
 import Data.Monoid
-import Data.Tuple.Sequence(sequenceT)
 import Data.Packer
 import Data.Tagged
+import Data.Tuple.Sequence (sequenceT)
+import Data.Vector.Storable.ByteString
 import Data.Word (Word64)
 import Pipes
 import qualified Pipes.Prelude as P
@@ -77,10 +87,21 @@ registerNamespace s ns s_buckets e_buckets = do
                       , indexEntry 0 e_buckets)
                     ]
 
+-- | Write a single extended point
+writeExtended :: Store s
+              => s
+              -> NameSpace
+              -> Address
+              -> Time
+              -> ByteString
+              -> IO ()
+writeExtended s ns addr t bs =
+    let p = Point (addr `setBit` 0) t (fromIntegral $ S.length bs)
+    in writeEncoded s ns (vectorToByteString [p] <> bs)
 
 -- | Write a mixed blob of points to the supplied store and namespace.
-writeEncoded :: Store s => s -> NameSpace -> Word64 -> ByteString -> IO ()
-writeEncoded s ns bucket_threshold encoded =
+writeEncoded :: Store s => s -> NameSpace -> ByteString -> IO ()
+writeEncoded s ns encoded =
     withLock s ns "write_lock" $ do
         -- Grab the latest index.
         (s_idx, e_idx) <- mustFetchIndexes s ns
@@ -123,8 +144,9 @@ writeEncoded s ns bucket_threshold encoded =
                                    (getOffsets SimpleBucketLocation)
                                    s_union
 
-        maybeRollover s ns bucket_threshold s_offsets s_latest' s_idx
-        maybeRollover s ns bucket_threshold e_offsets e_latest' e_idx
+        let threshold = rolloverThreshold s ns
+        maybeRollover s ns threshold s_offsets s_latest' s_idx
+        maybeRollover s ns threshold e_offsets e_latest' e_idx
   where
     -- | Find the offsets of a batch of objects.
     --
@@ -319,7 +341,7 @@ targetObjs idx start end addrs name_f  =
 
   where
     hashBuckets (epoch, max_buckets) acc =
-        nub [(epoch, simpleBucket max_buckets a) | a <- addrs ] ++ acc
+        nub [(epoch, placeBucket max_buckets a) | a <- addrs ] ++ acc
 
 -- How many buckets to fetch-ahead, we will want roughly this much memory *
 -- average block size.

@@ -39,13 +39,15 @@ key :: NameSpace -> ObjectName -> Key
 key (NameSpace ns) (ObjectName on) = Key ("02_" <> ns <> "_" <> on)
 
 data MemoryStore
-    = MemoryStore (MVar (Map Key ByteString)) (MVar [LockName])
+    = MemoryStore Word64 (MVar (Map Key ByteString)) (MVar [LockName])
 
-memoryStore :: IO MemoryStore
-memoryStore = MemoryStore <$> newMVar mempty <*> newMVar mempty
+-- | Create a new in-memory store with the provided minimum size for rollover.
+memoryStore :: Word64 -> IO MemoryStore
+memoryStore threshold = MemoryStore threshold <$> newMVar mempty
+                                              <*> newMVar mempty
 
 dumpMemoryStore :: MemoryStore -> IO String
-dumpMemoryStore (MemoryStore objects locks) = do
+dumpMemoryStore (MemoryStore _ objects locks) = do
     objs <- ifoldlOf itraversed fmt mempty <$> readMVar objects
     lcks <- show <$> readMVar locks
     return $ "MemoryStore: \n" ++ objs ++ "\nLocks:\n" ++ lcks
@@ -58,23 +60,25 @@ instance Store MemoryStore where
     type FetchFuture = Maybe ByteString
     type SizeFuture = Maybe Word64
 
+    rolloverThreshold (MemoryStore s _ _ )  _ =  s
+
     append = mergeWith (flip S.append)
 
     write = mergeWith const
 
-    fetch (MemoryStore objects _) ns obj =
+    fetch (MemoryStore _ objects _) ns obj =
         withMVar objects (return . Map.lookup (key ns obj))
 
     reifyFetch _ = return
 
-    size (MemoryStore objects _) ns obj =
+    size (MemoryStore _ objects _) ns obj =
             withMVar objects $ \obj_map ->
                 return $ fromIntegral . S.length
                          <$> Map.lookup (key ns obj) obj_map
 
     reifySize _ = return
 
-    unsafeLock s@(MemoryStore _ locks) ns x lock f = do
+    unsafeLock s@(MemoryStore _ _ locks) ns x lock f = do
         got_it <- modifyMVar locks $ \ls ->
             return (if lock `elem` ls
                 then (ls, False)
@@ -92,7 +96,7 @@ mergeWith :: (ByteString -> ByteString -> ByteString)
           -> NameSpace
           -> [(ObjectName, ByteString)]
           -> IO ()
-mergeWith f (MemoryStore objects _) ns appends =
+mergeWith f (MemoryStore _ objects _) ns appends =
         forM_ appends $ \(obj_name, bytes) ->
             modifyMVar_ objects $
                 return . Map.insertWith f (key ns obj_name) bytes

@@ -109,7 +109,7 @@ main =
 
 overwriteThenReadMutable :: Expectation
 overwriteThenReadMutable = do
-    s <- memoryStore
+    s <- memoryStore 0
     registerNamespace s testNS 3 2
 
     MutableTS.lookup s testNS 0 >>=
@@ -124,10 +124,10 @@ testNS = "PONIES"
 
 readSimplePoints :: Expectation
 readSimplePoints = do
-    s <- memoryStore
+    s <- memoryStore 0
     registerNamespace s testNS 10 20
-    writeEncoded s testNS 0 simplePoints
-    writeEncoded s testNS 0 extraSimples
+    writeEncoded s testNS simplePoints
+    writeEncoded s testNS extraSimples
 
     pipeToVec (readSimple s testNS 0 21 []) >>=
         (`shouldBe` [])
@@ -147,9 +147,9 @@ readSimplePoints = do
 
 readExtendedPoints :: Expectation
 readExtendedPoints = do
-    s <- memoryStore
+    s <- memoryStore 0
     registerNamespace s testNS 5 10
-    writeEncoded s testNS 0 extendedPoints
+    writeEncoded s testNS extendedPoints
 
     Pipes.toListM (readExtended s testNS 0 21 []) >>=
         (`shouldBe` [])
@@ -171,14 +171,14 @@ pipeToVec = liftM (map byteStringToVector) . Pipes.toListM
 
 registerWritesIndex :: Expectation
 registerWritesIndex = do
-    s <- memoryStore
+    s <- memoryStore 0
     registerNamespace s testNS 10 20
     ixs <- fetchIndexes s testNS
     ixs `shouldBe` Just (Tagged [(0, 10)], Tagged [(0,20)])
 
 writeEncodedBlob :: Expectation
 writeEncodedBlob = do
-    s <- memoryStore
+    s <- memoryStore 0
     -- Write the indexes as our previous tests expect to disk.
     write s testNS [ ( name (undefined :: Tagged Simple Index)
                      , untag simpleIndex ^. from index
@@ -187,7 +187,7 @@ writeEncodedBlob = do
                      , untag extendedIndex ^. from index
                      )
                    ]
-    writeEncoded s testNS 0 (simplePoints <> extendedPoints)
+    writeEncoded s testNS (simplePoints <> extendedPoints)
     objects <- fetchs s testNS [ name (SimpleBucketLocation (0,0))
                                , name (SimpleBucketLocation (0,2))
                                , name (SimpleBucketLocation (6,8))
