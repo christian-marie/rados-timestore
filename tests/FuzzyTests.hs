@@ -7,40 +7,31 @@
 -- the 3-clause BSD licence.
 --
 
-{-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedLists            #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-import Test.Hspec.QuickCheck
-import Test.QuickCheck
 import Control.Applicative
 import Control.Lens hiding (Index, Simple, index)
-import Control.Monad
 import Data.Bits.Lens
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
-import Data.ByteString.Builder
 import qualified Data.ByteString.Lazy as L
 import Data.Function
-import qualified Data.Map as Map
-import Data.Map.Strict (Map)
-import Data.Monoid
-import Data.String
-import Data.Tagged
 import Data.List
-import Data.Vector.Storable (Vector)
+import qualified Data.Map as Map
+import Data.Monoid
+import Data.Tagged
 import Data.Vector.Storable.ByteString
-import Data.Word (Word64)
-import Pipes (Producer)
-import qualified Pipes.Prelude as Pipes
 import Test.Hspec
+import Test.Hspec.QuickCheck
+import Test.QuickCheck
 import TimeStore
 import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
-import qualified TimeStore.Mutable as MutableTS
 
 
 newtype MixedPayload = MixedPayload { unMixedPayload :: ByteString }
@@ -53,16 +44,16 @@ newtype SimplePoint = SimplePoint { unSimplePoint :: ByteString }
 
 instance Arbitrary MixedPayload where
     arbitrary = do
-        len <- (`mod` 1024) . abs <$> arbitrary
-        MixedPayload . L.toStrict . L.fromChunks <$> go [] len
+        len <- (\(Positive n) ->  n `mod` 1048576) <$> arbitrary
+        MixedPayload . L.toStrict . L.fromChunks <$> go len
       where
-        go :: [ByteString] -> Int -> Gen [ByteString]
-        go xs 0 = return xs
-        go xs n = do
+        go :: Int -> Gen [ByteString]
+        go 0 = return []
+        go n = do
             p <- arbitrary
             case p of
-                Left  (ExtendedPoint x) -> go (x:xs) (pred n)
-                Right (SimplePoint x)   -> go (x:xs) (pred n)
+                Left  (ExtendedPoint x) -> (x:) <$> go (pred n)
+                Right (SimplePoint x)   -> (x:) <$> go (pred n)
 
 deriving instance Arbitrary Address
 deriving instance Arbitrary Time
