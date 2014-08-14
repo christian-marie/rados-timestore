@@ -28,8 +28,19 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import Data.Packer
 import qualified Pipes.Prelude as P
-import Prelude hiding (lookup)
+import Prelude hiding (lookup, mapM)
 import TimeStore
+import Pipes
+import TimeStore.StoreHelpers
+import Data.Tagged
+import TimeStore.Algorithms
+import TimeStore.Core
+import Data.Word
+
+-- | To save bootstrapping the system with actual day map files we will simply
+-- mod this value. This could be a scaling issue with huge data sets.
+mutableBuckets :: Word64
+mutableBuckets = 128
 
 lookup :: Store s
        => s
@@ -67,12 +78,22 @@ insertWith s ns f user_addr new = do
     let addr = user_addr `setBit` 0 -- Ensure address is extended
     x <- lookup' s ns addr
 
-    let (payload, t) = case x of
+    let (bs, t) = case x of
                 Nothing -> (new, 0)
                 Just (existing, t') -> (f new existing, succ t')
 
-    writeExtended s ns addr t payload
-    return payload
+    writeExtended s ns addr t bs
+    return bs
+
+enumerate :: Store s
+          => s
+          -> NameSpace
+          -> Producer ByteString IO ()
+enumerate s ns = do
+    xs <- lift $ fetchs s ns [ name (SimpleBucketLocation (0,0))
+                             , name (ExtendedBucketLocation (0,0))
+                             ]
+    undefined
 
 -- | Search through an extended burst, returning the last payload and timestamp
 -- seen.
@@ -82,15 +103,15 @@ findLast chunk = go 0 (error "findLast: bug: empty payload")
     go os prev
         | os >= S.length chunk = prev
         | otherwise =
-            let (len, time, payload) = runUnpacking (unpack os) chunk
-            in go (os + len + 24) (payload, time)
+            let (len, t, bs) = runUnpacking (unpack os) chunk
+            in go (os + len + 24) (bs, t)
 
     unpack os = do
         unpackSetPosition (os + 8) -- Seek to time, ignore address.
-        time <- Time <$> getWord64LE
+        t <- Time <$> getWord64LE
         len <- fromIntegral <$> getWord64LE
-        payload <- if len == 0
+        bs <- if len == 0
                        then return S.empty
                        else getBytes len
 
-        return (len, time, payload)
+        return (len, t, bs)

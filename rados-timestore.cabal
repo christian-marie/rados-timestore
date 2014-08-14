@@ -25,6 +25,7 @@ library
   other-modules:     TimeStore.Algorithms,
                      TimeStore.Index,
                      TimeStore.Core,
+                     TimeStore.StoreHelpers,
                      TimeStore.Stores.Memory
                      
   build-depends:     base >=3 && <5,

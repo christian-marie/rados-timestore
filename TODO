@@ -1,1 +1,2 @@
-* Confirm that we are OK with rollovers happening for the internal store.
+* unsafePartsOf appears in more than one place, need to remove that
+  duplication.
