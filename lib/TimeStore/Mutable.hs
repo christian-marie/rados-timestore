@@ -7,6 +7,8 @@
 -- the 3-clause BSD licence.
 --
 
+{-# LANGUAGE OverloadedStrings #-}
+
 -- | This module provides an abstraction on top of the "regular" TimeStore API
 -- to provide "mutability" by viewing a stored piece of data as a series of
 -- updates. There is no time associated with these blobs of data, the time
@@ -26,16 +28,19 @@ import Control.Monad
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
+import Data.Monoid
 import Data.Packer
-import Data.Tagged
-import Data.Word
 import Pipes
-import qualified Pipes.Prelude as P
 import Prelude hiding (lookup, mapM)
 import TimeStore
 import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.StoreHelpers
+
+-- | I heard you like namespaces so I put a _ in your namespace so you can
+-- namespace while you namespace.
+namespaceNamespace :: NameSpace -> NameSpace
+namespaceNamespace (NameSpace ns) = NameSpace (ns <> "_INTERNAL")
 
 lookup :: Store s
        => s
@@ -50,8 +55,9 @@ lookup' :: Store s
         -> NameSpace
         -> Address
         -> IO (Maybe (ByteString, Time))
-lookup' s ns user_addr = do
+lookup' s user_ns user_addr = do
     let addr = user_addr `setBit` 0
+    let ns = namespaceNamespace user_ns
     let bucket_n = placeBucket mutableBuckets addr
     buckets <- fetchs s ns [ name (SimpleBucketLocation (0, bucket_n))
                            , name (ExtendedBucketLocation (0, bucket_n))]
@@ -78,9 +84,13 @@ insertWith :: Store s
            -> Address
            -> ByteString
            -> IO ByteString
-insertWith s ns f user_addr new = do
+insertWith s user_ns f user_addr new = do
+    -- This little namespace dance is dangerous and should be replaced with
+    -- something more robust. We must pass the un-double-namespaced namespace
+    -- through to any internal calls to avoid triple-namespacing. Awesome.
+    let ns = namespaceNamespace user_ns
     let addr = user_addr `setBit` 0 -- Ensure address is extended
-    x <- lookup' s ns addr
+    x <- lookup' s user_ns addr
 
     let (bs, t) = case x of
                 Nothing -> (new, 0)
