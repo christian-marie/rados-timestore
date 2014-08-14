@@ -41,17 +41,13 @@ module TimeStore
 import Control.Applicative
 import Control.Lens hiding (Index, Simple, each, index)
 import Control.Monad
-import Data.Bitraversable
-import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import Data.Map.Strict (Map)
 import Data.Maybe
-import Data.Monoid
 import Data.Packer
 import Data.Tagged
 import Data.Tuple.Sequence (sequenceT)
-import Data.Vector.Storable.ByteString
 import Data.Word (Word64)
 import Pipes
 import qualified Pipes.Prelude as P
