@@ -19,6 +19,7 @@ module TimeStore.Algorithms
     PointerWrite(..),
     processSimple,
     processExtended,
+    processMutable,
 ) where
 
 import Control.Applicative
@@ -45,6 +46,7 @@ import Data.Word (Word64)
 import Hexdump
 import TimeStore.Core
 import TimeStore.Index
+import Data.Function(on)
 
 import qualified Data.Vector.Algorithms.Merge as Merge
 
@@ -203,6 +205,12 @@ processSimple start end addr input = runST $ do
     mv <- V.thaw v
     Merge.sort mv
     vectorToByteString <$> (deDuplicate similar mv >>= V.freeze)
+  where
+    -- | Is the address and time the same? We don't want to know about the
+    -- payload for de-duplication.
+    similar :: Point -> Point -> Bool
+    similar (Point a t _) (Point a' t' _) =
+        a == a' && t == t'
 
 -- | Given a simple and extended bucket, do the usual processing on the simple
 -- bucket, then grab the extended portions and merge the two together.
@@ -213,16 +221,42 @@ processExtended :: Time
                 -> ByteString
                 -> ByteString
 processExtended start end addrs s_bs e_bs =
+    mergeExtended e_bs $ processSimple start end addrs s_bs
+
+mergeExtended :: ByteString -> ByteString -> ByteString
+mergeExtended e_bs = 
     L.toStrict
     . toLazyByteString
     . V.foldl' merge mempty
     . byteStringToVector
-    $ processSimple start end addrs s_bs
   where
     merge acc (Point (Address a) (Time t) os) =
         let bytes = runUnpacking (getExtendedBytes os) e_bs
             bldr = word64LE a <> word64LE t <> byteString bytes
         in acc <> bldr
+
+-- | This is a special case, where we simply want to find the latest of each
+-- unique address.
+processMutable :: ByteString -> ByteString -> ByteString
+processMutable s_bs e_bs = mergeExtended e_bs $ latestUniques s_bs
+
+-- | Extract the latest (by time) of each unique address. This is done by
+-- sorting address ascending and time descending, then de-duplicating by
+-- address. Thus, the "first write wins" behaviour produces the last element of
+-- the sequence.
+latestUniques :: ByteString -> ByteString
+latestUniques bs = runST $ do
+    mv <- V.thaw (byteStringToVector bs)
+    Merge.sortBy cmp mv
+    vectorToByteString <$> (deDuplicate ((==) `on` _address) mv >>= V.freeze)
+  where
+    -- Compare addresses first, then time "in reverse", to place the latest
+    -- time at the beginning of the sequence.
+    cmp :: Point -> Point -> Ordering
+    cmp (Point a t _)  (Point a' t' _) =
+        case a `compare` a' of
+            EQ -> t' `compare` t
+            x  -> x
 
 -- First word is the length, then the string. We return the length and the
 -- string as a string.
@@ -232,12 +266,6 @@ getExtendedBytes offset = do
     len <- getWord64LE
     unpackSetPosition (fromIntegral offset)
     getBytes (fromIntegral len + 8)
-
--- | Is the address and time the same? We don't want to know about the payload
--- for de-duplication.
-similar :: Point -> Point -> Bool
-similar (Point a t _) (Point a' t' _) =
-    a == a' && t == t'
 
 -- | Sort and de-duplicate elements. First element wins.
 deDuplicate :: (PrimMonad m, MVector v e, Ord e)

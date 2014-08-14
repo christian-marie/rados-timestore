@@ -21,20 +21,24 @@ module TimeStore.Mutable
     lookup,
     insert,
     insertWith,
+    enumerate
 ) where
 
 import Control.Applicative
 import Control.Monad
 import Data.Bits
+import Control.Lens hiding (Index, Simple, index, each)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import Data.Monoid
 import Data.Packer
-import Pipes
+import Pipes hiding (enumerate)
+import qualified Pipes.Prelude as P
 import Prelude hiding (lookup, mapM)
 import TimeStore
 import TimeStore.Algorithms
 import TimeStore.Core
+import Data.Tuple.Sequence
 import TimeStore.StoreHelpers
 
 -- | I heard you like namespaces so I put a _ in your namespace so you can
@@ -103,11 +107,18 @@ enumerate :: Store s
           => s
           -> NameSpace
           -> Producer ByteString IO ()
-enumerate s ns = do
-    xs <- lift $ fetchs s ns [ name (SimpleBucketLocation (0,0))
-                             , name (ExtendedBucketLocation (0,0))
-                             ]
-    undefined
+enumerate s user_ns = do
+    let ns = namespaceNamespace user_ns
+    let objs = [(name (SimpleBucketLocation (0, x))
+                ,name (ExtendedBucketLocation (0, x)))
+               | x <- [0,2..mutableBuckets]]
+
+    buffered readAhead (each objs >-> P.mapM (both $ fetch s ns) )
+    >-> P.mapM (both $ reifyFetch s)
+    >-> P.map sequenceT
+    >-> P.concat
+    >-> P.map (uncurry processMutable)
+    >-> P.filter (not . S.null)
 
 -- | Search through an extended burst, returning the last payload and timestamp
 -- seen.
@@ -127,5 +138,4 @@ findLast chunk = go 0 (error "findLast: bug: empty payload")
         bs <- if len == 0
                        then return S.empty
                        else getBytes len
-
         return (len, t, bs)

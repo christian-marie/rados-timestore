@@ -59,6 +59,7 @@ import TimeStore.Core
 import TimeStore.Index
 import TimeStore.StoreHelpers
 import TimeStore.Stores.Memory
+import Data.Bitraversable
 
 -- | Check if a namespace is registered.
 isRegistered :: Store s => s -> NameSpace -> IO Bool
@@ -215,15 +216,9 @@ readExtended s ns start end addrs = do
     -- just use a tuple explicitly.
     let objs = zip s_objs e_objs
 
-    buffered readAhead (each objs >-> P.mapM fetchBoth)
-    >-> P.mapM reifyBoth -- Load buckets into memory.
+    buffered readAhead (each objs >-> P.mapM (both $ fetch s ns) )
+    >-> P.mapM (both $ reifyFetch s) -- Load buckets into memory.
     >-> P.map sequenceT  -- Ensure both or neither are there.
     >-> P.concat         -- Maybe (s_bs,e_bs) -> (s_bs,e_bs.)
     >-> P.map (uncurry (processExtended start end addrs))
     >-> P.filter (not . S.null)
-  where
-    reifyBoth (x,y) =
-        liftA2 (,) (reifyFetch s x) (reifyFetch s y)
-
-    fetchBoth (x,y) =
-        liftA2 (,) (fetch s ns x) (fetch s ns y)

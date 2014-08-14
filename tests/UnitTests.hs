@@ -119,6 +119,9 @@ overwriteThenReadMutable = do
     MutableTS.lookup s testNS 0 >>=
         (`shouldBe` Just "I'm a duck")
 
+    Pipes.toListM (MutableTS.enumerate s testNS) >>=
+        (`shouldBe` [vectorToByteString [Point 1 1 10] <> "I'm a duck"])
+
 testNS :: NameSpace
 testNS = "PONIES"
 
