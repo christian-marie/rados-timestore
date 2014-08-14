@@ -21,19 +21,19 @@ module TimeStore.StoreHelpers
 
 import Control.Exception
 import Control.Lens hiding (Index, Simple, each, index)
+import Data.ByteString (ByteString)
+import Data.ByteString.Builder (toLazyByteString)
+import Data.ByteString.Lazy (toStrict)
 import Data.List (nub)
+import Data.Map.Strict (Map, unionWith)
+import Data.Maybe
+import Data.Monoid
 import Data.Tagged
+import Data.Word
 import Pipes
+import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
-import Data.Map.Strict (Map, unionWith)
-import Data.Monoid
-import Data.Word
-import TimeStore.Algorithms
-import Data.ByteString.Lazy (toStrict)
-import Data.ByteString.Builder (toLazyByteString)
-import Data.ByteString(ByteString)
-import Data.Maybe
 
 -- | Attempt to fetch and parse the simple and extended indexes from the data
 -- store.
@@ -89,7 +89,7 @@ targetObjs idx start end addrs name_f  =
     hashBuckets (epoch, max_buckets) acc =
         nub [(epoch, placeBucket max_buckets a) | a <- addrs ] ++ acc
 
-    
+
 writeBuckets :: Store s
              => s
              -> NameSpace
@@ -139,8 +139,8 @@ writeBuckets s ns s_writes e_writes p_writes = do
 -- This must maintain the invariant that size of the domain equals the size
 -- of the codomain.
 getOffsets :: (Store s, Nameable n)
-           => s 
-           -> NameSpace 
+           => s
+           -> NameSpace
            -> (a -> n)
            -> [(a, b)]
            -> IO [(a, Word64)]

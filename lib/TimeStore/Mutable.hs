@@ -27,15 +27,15 @@ import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import Data.Packer
+import Data.Tagged
+import Data.Word
+import Pipes
 import qualified Pipes.Prelude as P
 import Prelude hiding (lookup, mapM)
 import TimeStore
-import Pipes
-import TimeStore.StoreHelpers
-import Data.Tagged
 import TimeStore.Algorithms
 import TimeStore.Core
-import Data.Word
+import TimeStore.StoreHelpers
 
 -- | To save bootstrapping the system with actual day map files we will simply
 -- mod this value. This could be a scaling issue with huge data sets.
