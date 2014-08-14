@@ -7,6 +7,8 @@
 -- the 3-clause BSD licence.
 --
 
+{-# LANGUAGE OverloadedLists #-}
+
 module TimeStore.StoreHelpers
 (
     fetchIndexes,
@@ -16,19 +18,24 @@ module TimeStore.StoreHelpers
     buffered,
     writeBuckets,
     getOffsets,
+    mutableBuckets,
+    writeMutableBlob,
 ) where
-
 
 import Control.Exception
 import Control.Lens hiding (Index, Simple, each, index)
+import Control.Monad (void)
+import Data.Bits
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as S
 import Data.ByteString.Builder (toLazyByteString)
 import Data.ByteString.Lazy (toStrict)
 import Data.List (nub)
-import Data.Map.Strict (Map, unionWith)
+import Data.Map.Strict (Map, fromList, unionWith)
 import Data.Maybe
 import Data.Monoid
 import Data.Tagged
+import Data.Vector.Storable.ByteString
 import Data.Word
 import Pipes
 import TimeStore.Algorithms
@@ -134,6 +141,33 @@ writeBuckets s ns s_writes e_writes p_writes = do
     buildSimple = bimap (name . SimpleBucketLocation)
                         (toStrict . toLazyByteString . unSimpleWrite)
 
+-- | To save bootstrapping the system with actual day map files we will simply
+-- mod this value. This could be a scaling issue with huge data sets.
+mutableBuckets :: Bucket
+mutableBuckets = 128
+
+-- | Write a blob down without an index.
+--
+-- This sounds like a hack because it's a total hack.
+writeMutableBlob :: Store s
+              => s
+              -> NameSpace
+              -> Address
+              -> Time
+              -> ByteString
+              -> IO ()
+writeMutableBlob s ns addr t bs = do
+    let p = Point (addr `setBit` 0) t (fromIntegral $ S.length bs)
+    let blob = vectorToByteString [p] <> bs
+
+    let idx = Index (fromList [(0, mutableBuckets)])
+    let s_idx = Tagged idx
+    let e_idx = Tagged idx
+
+    let (s_writes, e_writes, p_writes, _, _) = groupMixed s_idx e_idx blob
+
+    void $ writeBuckets s ns s_writes e_writes p_writes
+
 -- | Find the offsets of a batch of objects.
 --
 -- This must maintain the invariant that size of the domain equals the size
@@ -178,5 +212,3 @@ buffered n = go []
                         return r
                     Right (a, rest) ->
                         go (a:as) rest
-
-

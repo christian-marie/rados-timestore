@@ -37,11 +37,6 @@ import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.StoreHelpers
 
--- | To save bootstrapping the system with actual day map files we will simply
--- mod this value. This could be a scaling issue with huge data sets.
-mutableBuckets :: Word64
-mutableBuckets = 128
-
 lookup :: Store s
        => s
        -> NameSpace
@@ -55,9 +50,18 @@ lookup' :: Store s
         -> NameSpace
         -> Address
         -> IO (Maybe (ByteString, Time))
-lookup' s ns user_addr =
+lookup' s ns user_addr = do
     let addr = user_addr `setBit` 0
-    in (fmap . fmap) findLast (P.last (readExtended s ns 0 maxBound [addr]))
+    let bucket_n = placeBucket mutableBuckets addr
+    buckets <- fetchs s ns [ name (SimpleBucketLocation (0, bucket_n))
+                           , name (ExtendedBucketLocation (0, bucket_n))]
+    case sequence buckets of
+        Just [s_bs,e_bs] ->
+            let processed = processExtended 0 maxBound [addr] s_bs e_bs in
+            if S.null processed
+                then return Nothing
+                else return . Just  $ findLast processed
+        _ -> return Nothing
 
 insert :: Store s
        => s
@@ -82,7 +86,7 @@ insertWith s ns f user_addr new = do
                 Nothing -> (new, 0)
                 Just (existing, t') -> (f new existing, succ t')
 
-    writeExtended s ns addr t bs
+    writeMutableBlob s ns addr t bs
     return bs
 
 enumerate :: Store s

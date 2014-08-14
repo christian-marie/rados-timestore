@@ -22,7 +22,6 @@ module TimeStore
 
     -- * Writing
     writeEncoded,
-    writeExtended,
 
     -- * Reading
     readSimple,
@@ -83,18 +82,6 @@ registerNamespace s ns s_buckets e_buckets = do
                     , ( name (undefined :: Tagged Extended Index)
                       , indexEntry 0 e_buckets)
                     ]
-
--- | Write a single extended point
-writeExtended :: Store s
-              => s
-              -> NameSpace
-              -> Address
-              -> Time
-              -> ByteString
-              -> IO ()
-writeExtended s ns addr t bs =
-    let p = Point (addr `setBit` 0) t (fromIntegral $ S.length bs)
-    in writeEncoded s ns (vectorToByteString [p] <> bs)
 
 -- | Write a mixed blob of points to the supplied store and namespace.
 writeEncoded :: Store s => s -> NameSpace -> ByteString -> IO ()
