@@ -33,7 +33,6 @@ import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
 
-
 newtype MixedPayload = MixedPayload { unMixedPayload :: ByteString }
   deriving (Eq, Show)
 
@@ -82,8 +81,10 @@ instance Arbitrary SimplePoint where
 instance Arbitrary Index where
     arbitrary = do
         (Positive first) <- arbitrary
-        xs <- map (\(Positive x, Positive y) -> (x, y)) <$> arbitrary
-        return . Index . Map.fromList . sortBy (compare `on` fst) $ (0, first) : xs
+        xs <- sortBy (compare `on` fst)
+              . map (\(Positive x, Positive y) -> (x, (y `mod` 128) + 1))
+              <$> arbitrary
+        return . Index . Map.fromList $ (0, first) : xs
 
 main :: IO ()
 main = hspec $

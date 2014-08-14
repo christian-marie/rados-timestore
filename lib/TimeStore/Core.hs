@@ -169,7 +169,7 @@ bucketLocation (Epoch epoch) (Bucket bucket) kind =
 
 newtype Bucket
     = Bucket { unBucket :: Word64 }
-  deriving (Eq, Ord, Num, Show, Enum)
+  deriving (Eq, Ord, Num, Show, Enum, Real, Integral)
 
 newtype LockName
     = LockName { unLockName :: ByteString }
