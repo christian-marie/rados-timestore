@@ -23,11 +23,13 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import Data.ByteString.Builder
 import qualified Data.ByteString.Lazy as L
+import Data.Function
 import qualified Data.Map as Map
 import Data.Map.Strict (Map)
 import Data.Monoid
 import Data.String
 import Data.Tagged
+import Data.List
 import Data.Vector.Storable (Vector)
 import Data.Vector.Storable.ByteString
 import Data.Word (Word64)
@@ -88,19 +90,9 @@ instance Arbitrary SimplePoint where
 
 instance Arbitrary Index where
     arbitrary = do
-        -- 12 seems a little low to cause slow-down, need to look in to why.
-        n <- (`mod` 8) <$> arbitrary 
         (Positive first) <- arbitrary
-        xs <- go n 0
-        return . Index . Map.fromList $ (0, first) : xs
-      where
-        go :: Int -> Epoch -> Gen [(Epoch, Bucket)]
-        go 0 _ = return []
-        go n prev = do
-            (Positive buckets) <- arbitrary
-            epoch <- arbitrary `suchThat` (> prev)
-            next <- go (pred n) epoch
-            return $ (epoch, buckets) : next
+        xs <- map (\(Positive x, Positive y) -> (x, y)) <$> arbitrary
+        return . Index . Map.fromList . sortBy (compare `on` fst) $ (0, first) : xs
 
 main :: IO ()
 main = hspec $
