@@ -7,6 +7,7 @@
 -- the 3-clause BSD licence.
 --
 
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedLists            #-}
 {-# LANGUAGE OverloadedStrings          #-}
@@ -15,31 +16,39 @@
 
 import Control.Applicative
 import Control.Lens hiding (Index, Simple, index)
+import Control.Monad
 import Data.Bits.Lens
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
 import Data.Function
 import Data.List
+import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Monoid
 import Data.Tagged
 import Data.Vector.Storable.ByteString
 import Test.Hspec
 import Test.Hspec.QuickCheck
-import Test.QuickCheck
+import Test.QuickCheck hiding (reason, theException)
+import Test.QuickCheck.Monadic
 import TimeStore
 import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
+import qualified TimeStore.Mutable as Mutable
 
-newtype MixedPayload = MixedPayload { unMixedPayload :: ByteString }
+newtype MixedPayload
+  = MixedPayload { unMixedPayload :: ByteString }
   deriving (Eq, Show)
 
-newtype ExtendedPoint = ExtendedPoint { unExtendedPoint :: ByteString }
+newtype ExtendedPoint
+  = ExtendedPoint { unExtendedPoint :: ByteString }
   deriving (Eq, Show)
 
-newtype SimplePoint = SimplePoint { unSimplePoint :: ByteString }
+newtype SimplePoint
+  = SimplePoint { unSimplePoint :: ByteString }
+  deriving (Eq, Show)
 
 instance Arbitrary MixedPayload where
     arbitrary = do
@@ -86,9 +95,71 @@ instance Arbitrary Index where
               <$> arbitrary
         return . Index . Map.fromList $ (0, first) : xs
 
+
+-- A helper for chaining future propositions awaiting an input i.
+data Proposition i
+    = Proposition { unProposition :: i -> Either String () }
+instance Show (Proposition i) where
+    show _ = "Proposition"
+
+instance Monoid (Proposition i) where
+  mempty = Proposition (const (Right ()))
+  Proposition a `mappend` Proposition b =
+    Proposition (\x -> a x >> b x)
+
+propose :: String -> (i -> Bool) -> Proposition i
+propose tag f = Proposition (\i -> if f i then Right () else Left tag)
+
 main :: IO ()
-main = hspec $
-    prop "Groups ponts" propGroupsPoints
+main = hspec $ do
+    prop "Point grouping" propGroupsPoints
+    prop "Mutable store" propMutableStore
+
+data MutableWrites
+  = MutableWrites [(Address, ByteString)] (Proposition (Map Address ByteString))
+  deriving Show
+
+type MutableWriteProp = Proposition (Map Address ByteString)
+
+instance Arbitrary MutableWrites where
+    arbitrary = do
+        len <- (\(Positive n) ->  n `mod` 1048576) <$> arbitrary
+        (prop_map, entries) <- go len
+
+        let props = mconcat $ Map.elems prop_map
+
+        return $ MutableWrites entries props
+      where
+        go :: Int
+           -> Gen (Map Address MutableWriteProp, [(Address, ByteString)])
+        go 0 = return (mempty, mempty)
+        go n = do
+            (props, xs) <- go (pred n)
+            addr <- (bitAt 0 .~ True) <$> arbitrary
+            bytes <- S.pack <$> arbitrary
+            let p = propose ("lookup " ++ show addr)
+                            (\rds -> case Map.lookup addr rds of
+                                        Nothing -> False
+                                        Just bs -> bs == bytes)
+            let props' = Map.insertWith (flip const) addr p props
+            return (props', (addr, bytes):xs)
+
+testNS :: NameSpace
+testNS = "PONIES"
+
+propMutableStore :: MutableWrites -> Property
+propMutableStore (MutableWrites writes p) = monadicIO $ do
+    res <- run $ do
+        s <- memoryStore 42
+        mapM_ (uncurry (Mutable.insert s testNS )) writes
+        foldM (lookupAndInsert s) mempty (map fst writes)
+    assert . either error (const True) $ unProposition p res
+  where
+     lookupAndInsert s acc addr = do
+        maybe_bs <- Mutable.lookup s testNS addr
+        case maybe_bs of
+            Nothing -> error $ "Lost data at addr" ++ show addr
+            Just bs -> return $ Map.insert addr bs acc
 
 propGroupsPoints :: Index -> Index -> MixedPayload -> Bool
 propGroupsPoints ix1 ix2 (MixedPayload x) =
@@ -99,3 +170,4 @@ propGroupsPoints ix1 ix2 (MixedPayload x) =
     -- extended max. This is because adding an extended point will add a
     -- pointer to the simple bucket.
     in e_max <= s_max
+
