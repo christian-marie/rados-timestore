@@ -149,10 +149,11 @@ groupMixed (Tagged s_idx) (Tagged e_idx) input = go mempty mempty mempty (Tagged
                     let e_map' =  Map.insertWith (flip mappend) e_loc e_wr e_map
                     -- This pointer will reference the extended write now.
                     let f = PointerWrite (len + 8) (makePointer e_loc addr t)
-                    -- Insert pointer closure into the pointer map (grouped by
-                    -- the simple index). This will be merged with the simple
-                    -- writes once the offset is calculated and passed in.
-                    let p_map' = Map.insertWith (flip mappend) s_loc f p_map
+                    -- Insert pointer closure into the pointer map (indexed by
+                    -- the same extended index). This will be merged with any
+                    -- simple writes once the offset is calculated and passed
+                    -- in.
+                    let p_map' = Map.insertWith (flip mappend) e_loc f p_map
                     go s_map e_map' p_map' s_latest' e_latest' (os + 24 + len)
                 -- This one is simple
                 else do

@@ -204,8 +204,8 @@ readExtended :: Store s
            -> [Address]
            -> Producer ByteString IO ()
 readExtended s ns start end addrs = do
-    (Tagged s_ix, Tagged e_ix) <- lift (mustFetchIndexes s ns)
-    let s_objs = targetObjs s_ix start end addrs (name . SimpleBucketLocation)
+    (_, Tagged e_ix) <- lift (mustFetchIndexes s ns)
+    let s_objs = targetObjs e_ix start end addrs (name . SimpleBucketLocation)
     let e_objs = targetObjs e_ix start end addrs (name . ExtendedBucketLocation)
 
     -- There's probably a nicer abstraction for zipping two pipes together, we

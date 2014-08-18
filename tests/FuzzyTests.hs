@@ -28,6 +28,8 @@ import qualified Data.Map as Map
 import Data.Monoid
 import Data.Tagged
 import Data.Vector.Storable.ByteString
+import Data.Word (Word64)
+import qualified Pipes.Prelude as P
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck hiding (reason, theException)
@@ -114,12 +116,11 @@ main :: IO ()
 main = hspec $ do
     prop "Point grouping" propGroupsPoints
     prop "Mutable store" propMutableStore
+    prop "Immutable store" propImmutableStore
 
 data MutableWrites
   = MutableWrites [(Address, ByteString)] (Proposition (Map Address ByteString))
   deriving Show
-
-type MutableWriteProp = Proposition (Map Address ByteString)
 
 instance Arbitrary MutableWrites where
     arbitrary = do
@@ -131,7 +132,7 @@ instance Arbitrary MutableWrites where
         return $ MutableWrites entries props
       where
         go :: Int
-           -> Gen (Map Address MutableWriteProp, [(Address, ByteString)])
+           -> Gen (Map Address WriteProp, [(Address, ByteString)])
         go 0 = return (mempty, mempty)
         go n = do
             (props, xs) <- go (pred n)
@@ -144,6 +145,57 @@ instance Arbitrary MutableWrites where
             let props' = Map.insertWith (flip const) addr p props
             return (props', (addr, bytes):xs)
 
+
+data ImmutableWrites
+  = ImmutableWrites [(Address, ByteString)] (Proposition (Map Address ByteString))
+  deriving Show
+
+type WriteProp = Proposition (Map Address ByteString)
+
+instance Arbitrary ImmutableWrites where
+    arbitrary = do
+        len <- (\(Positive n) ->  n `mod` 1048576) <$> arbitrary
+        (prop_map, entries) <- go len
+
+        let props = mconcat $ Map.elems prop_map
+
+        return $ ImmutableWrites entries props
+      where
+        go :: Int
+           -> Gen (Map Address WriteProp, [(Address, ByteString)])
+        go 0 = return (mempty, mempty)
+        go n = do
+            (props, xs) <- go (pred n)
+            p <- arbitrary
+
+            (proposition, bs) <- if p ^. address . bitAt 0
+                                    then doExtended p
+                                    else doSimple p
+
+            let props' = Map.insert (p ^. address) proposition props
+            return (props', (p ^. address, bs):xs)
+
+        doExtended p = do
+            let p' = p & payload %~ (`mod` 1024)
+            pl <- S.pack <$> vectorOf (fromIntegral $ p' ^. payload) arbitrary
+            let proposition = propose ("lookup extended " ++ p' ^. address . to show)
+                                      (\rds -> case Map.lookup (p' ^. address) rds of
+                                                Nothing ->
+                                                    False
+                                                Just bs ->
+                                                    not . S.null . snd $ pl `S.breakSubstring` bs)
+            return (proposition, vectorToByteString [p'] <> pl)
+
+        doSimple p = do
+            let bs  = vectorToByteString [p]
+            let proposition = propose ("lookup simple " ++ p ^. address . to show)
+                                      (\rds -> case Map.lookup (p ^. address) rds of
+                                                Nothing ->
+                                                    False
+                                                Just bs' ->
+                                                    not . S.null . snd $ bs `S.breakSubstring` bs')
+            return (proposition, bs)
+
 testNS :: NameSpace
 testNS = "PONIES"
 
@@ -151,14 +203,34 @@ propMutableStore :: MutableWrites -> Property
 propMutableStore (MutableWrites writes p) = monadicIO $ do
     res <- run $ do
         s <- memoryStore 42
-        mapM_ (uncurry (Mutable.insert s testNS )) writes
+        mapM_ (uncurry (Mutable.insert s testNS)) writes
         foldM (lookupAndInsert s) mempty (map fst writes)
     assert . either error (const True) $ unProposition p res
   where
      lookupAndInsert s acc addr = do
         maybe_bs <- Mutable.lookup s testNS addr
         case maybe_bs of
-            Nothing -> error $ "Lost data at addr" ++ show addr
+            Nothing -> error $ "Lost data at " ++ show addr
+            Just bs -> return $ Map.insert addr bs acc
+
+propImmutableStore :: ImmutableWrites -> Positive Word64 -> Positive Word64 -> Property
+propImmutableStore (ImmutableWrites writes p)
+                   (Positive s_buckets)
+                   (Positive e_buckets) = monadicIO $ do
+    res <- run $ do
+        s <- memoryStore 42
+        registerNamespace s testNS s_buckets e_buckets
+        mapM_ (writeEncoded s testNS . snd) writes
+        foldM (lookupAndInsert s) mempty (map fst writes)
+    assert . either error (const True) $ unProposition p res
+  where
+     lookupAndInsert s acc addr = do
+        let prod = if addr ^. bitAt 0
+            then readExtended s testNS 0 maxBound [addr]
+            else readSimple s testNS 0 maxBound  [addr]
+        maybe_bs <- P.head prod
+        case maybe_bs of
+            Nothing -> error $ "Lost data at " ++ show addr
             Just bs -> return $ Map.insert addr bs acc
 
 propGroupsPoints :: Index -> Index -> MixedPayload -> Bool

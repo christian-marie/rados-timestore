@@ -39,6 +39,9 @@ main =
             it "groups extended points" groupExtended
 
         describe "main api" $ do
+            describe "corner cases" $
+                it "handles ext write after simple roll-over" extAfterSimple
+
             describe "registerOrigin" $
                 it "writes index files out" registerWritesIndex
 
@@ -54,6 +57,19 @@ main =
         describe "mutable API" $
             describe "insert/lookup" $
                 it "overwrites and reads" overwriteThenReadMutable
+
+extAfterSimple :: Expectation
+extAfterSimple = do
+        s <- memoryStore 0
+        registerNamespace s testNS 4 5
+        let e_write = vectorToByteString [Point 7 7 5] <> "yayyy"
+        -- Rollover at 6 (nanoseconds)
+        writeEncoded s testNS (vectorToByteString [Point 6 6 3])
+        -- Now, this may fail if there is incorectness in any extended/simple
+        -- indexing/rollover logic.
+        writeEncoded s testNS e_write
+        Pipes.head (readExtended s testNS 0 maxBound [7])
+            >>= (`shouldBe` Just e_write)
 
 overwriteThenReadMutable :: Expectation
 overwriteThenReadMutable = do
