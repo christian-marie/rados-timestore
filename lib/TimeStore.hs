@@ -43,9 +43,7 @@ import Control.Lens hiding (Index, Simple, each, index)
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
-import Data.Map.Strict (Map)
 import Data.Maybe
-import Data.Packer
 import Data.Tagged
 import Data.Tuple.Sequence (sequenceT)
 import Data.Word (Word64)
@@ -105,73 +103,6 @@ writeEncoded s ns encoded =
         let threshold = rolloverThreshold s ns
         maybeRollover s ns threshold s_offsets s_latest' s_idx
         maybeRollover s ns threshold e_offsets e_latest' e_idx
-
--- | Do a roll over on the supplied index if any of the buckets have become too
--- large.
-maybeRollover :: (Nameable (Tagged a Index), Store s)
-              => s
-              -> NameSpace
-              -> Word64
-              -> Map (Epoch,Bucket) Word64
-              -> Tagged a Time
-              -> Tagged a Index
-              -> IO ()
-maybeRollover s ns bucket_threshold offsets (Tagged (Time latest)) idx = do
-    -- We only want to roll over for the latest epoch, otherwise we would roll
-    -- over every time we wrote to an old (full) bucket.
-    let (epoch, Bucket buckets) = indexLookup maxBound (untag idx)
-    let wr_fld = maximumOf (ifolded . indices ((== epoch) . fst)) offsets
-    case wr_fld of
-        Just max_wr ->
-            -- We compare the largest offset (from a write) with the threshold.
-            when (max_wr > bucket_threshold)
-                 (append s ns [(name idx, indexEntry latest buckets)])
-        _ ->
-            return ()
-
-indexEntry :: Word64 -> Word64 -> ByteString
-indexEntry epoch buckets =
-    runPacking 16 (putWord64LE epoch >> putWord64LE buckets)
-
--- | The latest files ensure that we do not "cut off" any data when rolling
--- over to a new epoch (adding an entry to the index).
---
--- The epoch of the new entry in the index must be later than every point we
--- have seen up to now, or data would be lost.
-updateLatest :: Store s => s
-             -> NameSpace
-             -> Tagged Simple Time
-             -> Tagged Extended Time
-             -> IO (Tagged Simple Time, Tagged Extended Time)
-updateLatest s ns s_time e_time = withLock s ns "latest_update" $ do
-    latests <- fetchs s ns [simpleLatest, extendedLatest]
-    case latests & traversed . traversed %~ parse of
-        [Just s_latest, Just e_latest] -> do
-            write s ns $ maybeWrite s_latest s_time
-                       ++ maybeWrite e_latest e_time
-            return (max' s_latest s_time, max' e_latest e_time)
-        [Nothing, Nothing] -> do
-            -- First write
-            write s ns [ (simpleLatest, pack . unTime . untag $ s_time)
-                       , (extendedLatest, pack . unTime . untag $ e_time)
-                       ]
-            return (s_time, e_time)
-        _ -> error "updateLatest: did not get both or no latest"
-  where
-    max' :: Word64 -> Tagged a Time -> Tagged a Time
-    max' a (Tagged (Time b)) = Tagged . Time $ max a b
-
-    -- | Only want to write if the new time is later than the existing one.
-    maybeWrite :: forall a. Nameable (LatestFile a)
-               => Word64 -> Tagged a Time -> [(ObjectName, ByteString)]
-    maybeWrite latest (Tagged (Time t)) =
-        [(name (LatestFile :: LatestFile a), pack t) | latest < t]
-
-    pack x = runPacking 8 (putWord64LE x)
-    parse = runUnpacking getWord64LE
-
-    simpleLatest = name (LatestFile :: LatestFile Simple)
-    extendedLatest = name (LatestFile :: LatestFile Extended)
 
 -- | Request a range of simple points at the given addresses, returns a
 -- producer of chunks of points, each chunk is non-overlapping and ordered,

@@ -124,7 +124,7 @@ data MutableWrites
 
 instance Arbitrary MutableWrites where
     arbitrary = do
-        len <- (\(Positive n) ->  n `mod` 1048576) <$> arbitrary
+        len <- (\(Positive n) ->  n `mod` 1024) <$> arbitrary
         (prop_map, entries) <- go len
 
         let props = mconcat $ Map.elems prop_map
@@ -154,7 +154,7 @@ type WriteProp = Proposition (Map Address ByteString)
 
 instance Arbitrary ImmutableWrites where
     arbitrary = do
-        len <- (\(Positive n) ->  n `mod` 1048576) <$> arbitrary
+        len <- (\(Positive n) ->  n `mod` 1024) <$> arbitrary
         (prop_map, entries) <- go len
 
         let props = mconcat $ Map.elems prop_map
