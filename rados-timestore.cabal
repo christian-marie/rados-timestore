@@ -97,6 +97,7 @@ test-suite           fuzzy-tests
                      primitive,
                      lens,
                      pretty-hex,
+                     split,
                      bifunctors,
                      packer,
                      async,

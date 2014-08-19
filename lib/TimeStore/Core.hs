@@ -185,7 +185,7 @@ newtype Epoch = Epoch { unEpoch :: Word64 }
 newtype Address = Address {
     unAddress :: Word64
 }
-  deriving (Eq, Ord, Num, Bounded, Bits, Show, Storable)
+  deriving (Eq, Ord, Num, Bounded, Bits, Show, Storable, Enum, Real, Integral)
 
 newtype Time = Time {
     unTime :: Word64
