@@ -202,13 +202,14 @@ instance Arbitrary ImmutableWrites where
 testNS :: NameSpace
 testNS = "PONIES"
 
-propMutableStore :: MutableWrites -> Property
-propMutableStore (MutableWrites writes p) = monadicIO $ do
-    res <- run $ do
-        s <- memoryStore 42
-        mapM_ (uncurry (Mutable.insert s testNS)) writes
-        foldM (lookupAndInsert s) mempty (map fst writes)
-    assert . either error (const True) $ unProposition p res
+propMutableStore :: MutableWrites -> Positive Word64 -> Property
+propMutableStore (MutableWrites writes p) (Positive rollover) =
+    monadicIO $ do
+        res <- run $ do
+            s <- memoryStore rollover
+            mapM_ (uncurry (Mutable.insert s testNS)) writes
+            foldM (lookupAndInsert s) mempty (map fst writes)
+        assert . either error (const True) $ unProposition p res
   where
      lookupAndInsert s acc addr = do
         maybe_bs <- Mutable.lookup s testNS addr
