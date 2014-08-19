@@ -60,6 +60,8 @@ testStore store =  do
                 propAppendConcat store
             prop "overwriting writes after appending subset is writes" $
                 propAppendWrite store
+            prop "sizes are sizes" $
+                propSizes store
             it "has a well behaved lock" $
                 lockTest store
 
@@ -88,6 +90,21 @@ lockTest store = do
     readCtr s = do
         [Just n] <- fetchs s testNS [ctr]
         return . read . S.unpack $ n
+
+propSizes :: Store s
+          => IO s
+          -> NameSpace
+          -> NonEmptyList (ObjectName, ByteString)
+          -> Property
+propSizes store ns (NonEmpty writes) =
+    monadicIO $ do
+        let unique_writes = nubBy ((==) `on` fst) writes
+        xs <- run $ do
+            s <- store
+            write s ns unique_writes
+            sizes s ns (map fst unique_writes)
+        let expected = map (Just . fromIntegral . S.length . snd) unique_writes
+        assert (xs == expected)
 
 propAppendConcat :: Store s
                  => IO s

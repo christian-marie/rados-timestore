@@ -19,4 +19,5 @@ script:
   - 'cabal-$CABALVER configure'
   - 'cabal-$CABALVER build'
   - 'cabal-$CABALVER sdist'
-  - 'cabal-$CABALVER test'
+  - 'cabal-$CABALVER test unit-tests'
+  - 'cabal-$CABALVER test fuzzy-tests'
