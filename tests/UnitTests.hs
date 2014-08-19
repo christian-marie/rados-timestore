@@ -87,7 +87,7 @@ overwriteThenReadMutable = do
         (`shouldBe` [vectorToByteString [Point 1 1 10] <> "I'm a duck"])
 
 testNS :: NameSpace
-testNS = "PONIES"
+testNS = NameSpace "PONIES"
 
 readSimplePoints :: Expectation
 readSimplePoints = do

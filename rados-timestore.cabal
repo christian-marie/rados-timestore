@@ -110,5 +110,33 @@ test-suite           fuzzy-tests
   ghc-options:       -threaded
   ghc-prof-options:  -auto-all
 
+test-suite           store-tests
+  hs-source-dirs:    tests, lib
+  main-is:           StoreTests.hs
+  type:              exitcode-stdio-1.0
+  default-language:  Haskell2010
+  build-depends:     base >=3 && <5,
+                     hspec,
+                     QuickCheck,
+                     bytestring,
+                     tuple,
+                     vector,
+                     vector-algorithms,
+                     primitive,
+                     lens,
+                     pretty-hex,
+                     split,
+                     bifunctors,
+                     packer,
+                     async,
+                     unix,
+                     pipes,
+                     tagged,
+                     containers,
+                     spool,
+                     rados-timestore
+  ghc-options:       -threaded
+  ghc-prof-options:  -auto-all
+
 
 -- vim: set tabstop=21 expandtab:

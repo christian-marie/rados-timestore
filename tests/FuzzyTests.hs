@@ -200,7 +200,7 @@ instance Arbitrary ImmutableWrites where
             return (proposition, bs)
 
 testNS :: NameSpace
-testNS = "PONIES"
+testNS = NameSpace "PONIES"
 
 propMutableStore :: MutableWrites -> Positive Word64 -> Property
 propMutableStore (MutableWrites writes p) (Positive rollover) =

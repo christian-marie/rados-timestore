@@ -27,6 +27,7 @@ module TimeStore.Core
     time,
     payload,
     NameSpace(..),
+    nameSpace,
     Epoch(..),
     Address(..),
     Time(..),
@@ -147,7 +148,7 @@ instance Nameable (LatestFile Extended) where
 -- | An ObjectName represents a key for a store that can to be associated with
 -- data. They are unique within a NameSpace.
 newtype ObjectName = ObjectName { unObjectName :: ByteString }
-  deriving (IsString, Show)
+  deriving (IsString, Show, Eq)
 
 -- | The location of a bucket is calculated using the Epoch and Bucket. The
 -- bucket is calculated by (address mod max_buckets)
@@ -177,7 +178,13 @@ newtype LockName
 
 newtype NameSpace
     = NameSpace { unNameSpace :: ByteString }
-  deriving (Eq, Ord, Show, IsString)
+  deriving (Eq, Ord, Show)
+
+nameSpace :: ByteString -> Either String NameSpace
+nameSpace bs
+    | S.null bs     = Left "NameSpace may not be empty"
+    | S.elem '_' bs = Left "NameSpace may not include _"
+    | otherwise     = Right . NameSpace $ bs
 
 newtype Epoch = Epoch { unEpoch :: Word64 }
   deriving (Eq, Ord, Num, Show)

@@ -17,7 +17,8 @@ module TimeStore
     -- * Types
     Time(..),
     Address(..),
-    NameSpace(..),
+    NameSpace(unNameSpace),
+    nameSpace,
     Store(..),
 
     -- * Writing
