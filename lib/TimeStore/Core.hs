@@ -101,6 +101,8 @@ class Store s where
     sizes :: s -> NameSpace -> [ObjectName] -> IO [Maybe Word64]
     sizes s ns objs = mapM (size s ns) objs >>= mapM (reifySize s)
 
+    -- | Take a lock with the given expiry. If a lock remains after this expiry
+    -- then there are no guarantees that we can recover from a deadlock.
     unsafeLock :: s -> NameSpace -> Int -> LockName -> IO a -> IO a
 
     -- | Safely acquire a lock, if your action takes longer than a (arbitrary)
