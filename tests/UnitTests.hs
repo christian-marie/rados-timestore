@@ -140,8 +140,10 @@ registerWritesIndex :: Expectation
 registerWritesIndex = do
     s <- memoryStore 0
     registerNamespace s testNS 10 20
-    ixs <- fetchIndexes s testNS
-    ixs `shouldBe` Just (Tagged [(0, 10)], Tagged [(0,20)])
+    s_ix <- fetchIndex s testNS
+    e_ix <- fetchIndex s testNS
+    s_ix `shouldBe` Just (Tagged [(0, 10)] :: Tagged Simple Index)
+    e_ix `shouldBe` Just (Tagged [(0, 20)] :: Tagged Extended Index)
 
 writeEncodedBlob :: Expectation
 writeEncodedBlob = do

@@ -31,7 +31,7 @@ module TimeStore
     -- * Utility/internal
     registerNamespace,
     isRegistered,
-    fetchIndexes,
+    fetchIndex,
 
     -- * Memory store (testing)
     MemoryStore,
@@ -40,6 +40,7 @@ module TimeStore
 ) where
 
 import Control.Applicative
+import Control.Concurrent.Async
 import Control.Lens hiding (Index, Simple, each, index)
 import Control.Monad
 import Data.ByteString (ByteString)
@@ -58,7 +59,8 @@ import TimeStore.Stores.Memory
 
 -- | Check if a namespace is registered.
 isRegistered :: Store s => s -> NameSpace -> IO Bool
-isRegistered s ns = isJust <$> fetchIndexes s ns
+isRegistered s ns =
+    isJust <$> (fetchIndex s ns :: IO (Maybe (Tagged Simple Index)))
 
 -- | Register a namespace with the given number of buckets. This is idempotent,
 -- however on subsequent runs the bucket argument will be ignored.
@@ -84,7 +86,8 @@ writeEncoded :: Store s => s -> NameSpace -> ByteString -> IO ()
 writeEncoded s ns encoded =
     withExclusiveLock s ns "write_lock" $ do
         -- Grab the latest index.
-        (s_idx, e_idx) <- mustFetchIndexes s ns
+        (s_idx, e_idx) <- concurrently (mustFetchIndex s ns)
+                                       (mustFetchIndex s ns)
 
         -- Collate points into epochs and buckets
         let (s_writes, e_writes, p_writes,
@@ -116,7 +119,7 @@ readSimple :: Store s
            -> [Address]
            -> Producer ByteString IO ()
 readSimple s ns start end addrs = do
-    (Tagged s_ix, _) <- lift (mustFetchIndexes s ns)
+    (Tagged s_ix) :: Tagged Simple Index <- lift (mustFetchIndex s ns)
     let objs = targetObjs s_ix start end addrs (name . SimpleBucketLocation)
 
     buffered readAhead (each objs >-> P.mapM (fetch s ns))
@@ -136,7 +139,7 @@ readExtended :: Store s
            -> [Address]
            -> Producer ByteString IO ()
 readExtended s ns start end addrs = do
-    (_, Tagged e_ix) <- lift (mustFetchIndexes s ns)
+    (Tagged e_ix) :: Tagged Extended Index <- lift (mustFetchIndex s ns)
     let s_objs = targetObjs e_ix start end addrs (name . SimpleBucketLocation)
     let e_objs = targetObjs e_ix start end addrs (name . ExtendedBucketLocation)
 

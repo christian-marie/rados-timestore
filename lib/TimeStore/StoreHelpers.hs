@@ -14,8 +14,8 @@
 
 module TimeStore.StoreHelpers
 (
-    fetchIndexes,
-    mustFetchIndexes,
+    fetchIndex,
+    mustFetchIndex,
     targetObjs,
     readAhead,
     buffered,
@@ -49,29 +49,27 @@ import TimeStore.Algorithms
 import TimeStore.Core
 import TimeStore.Index
 
--- | Attempt to fetch and parse the simple and extended indexes from the data
--- store.
-fetchIndexes :: Store s
-             => s -> NameSpace
-             -> IO (Maybe (Tagged Simple Index, Tagged Extended Index))
-fetchIndexes s ns = do
-    ixs <- fetchs s ns [name (undefined :: Tagged Simple Index)
-                       ,name (undefined :: Tagged Extended Index)]
+-- | Attempt to fetch and parse an index
+fetchIndex :: forall s a. (Store s, Nameable (Tagged a Index))
+           => s
+           -> NameSpace
+           -> IO (Maybe (Tagged a Index))
+fetchIndex s ns = do
+    ixs <- fetchs s ns [name (undefined :: Tagged a Index)]
     return $ case sequence ixs of
-        Just [s_idx, e_idx] ->
-            Just ( Tagged (s_idx ^. index)
-                 , Tagged (e_idx ^. index)
-                 )
+        Just [idx] ->
+            Just (Tagged $ idx ^. index)
         Nothing -> Nothing
         _ ->
-            error "getIndexes: impossible"
+            error "getIndex: impossible"
 
-mustFetchIndexes :: Store s
-                 => s
-                 -> NameSpace
-                 -> IO (Tagged Simple Index, Tagged Extended Index)
-mustFetchIndexes s ns =
-    fetchIndexes s ns >>= \x -> case x of
+-- | Parse an index, explode on failure.
+mustFetchIndex :: forall s a. (Store s, Nameable (Tagged a Index))
+               => s
+               -> NameSpace
+               -> IO (Tagged a Index)
+mustFetchIndex s ns =
+    fetchIndex s ns >>= \x -> case x of
         Just y  -> return y
         Nothing -> throwIO (userError "Invalid namespace")
 
