@@ -12,6 +12,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 import Control.Applicative
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
 import Control.Monad
 import Data.ByteString (ByteString)
@@ -26,7 +27,6 @@ import Test.QuickCheck hiding (reason, theException)
 import Test.QuickCheck.Monadic
 import TimeStore
 import TimeStore.Core
-import Control.Concurrent(threadDelay)
 
 newtype ValidBS
     = ValidBS { unValidBS :: ByteString }
@@ -71,7 +71,7 @@ testNS = NameSpace "PONIES"
 
 -- Testing locks is hard, you will probably want to prove yours in some other
 -- way.
--- 
+--
 -- However, this might catch pathologically bad locks. Increasing the
 -- threadDelay for a more latent store might help you find bugs.
 lockTest :: forall s. Store s => IO s -> Expectation

@@ -81,33 +81,44 @@ instance Store MemoryStore where
 
     reifySize _ = return
 
-    unsafeSharedLock s@(MemoryStore _ _ locks) ns x lock f = do
-        got_it <- modifyMVar locks $ \ls -> do
-            let prev = Map.findWithDefault 0 lock ls 
-            return $
-                if prev == -1
-                    then (ls, False) -- Exclusively locked
-                    else (Map.insert lock (succ prev) ls, True)
-        if got_it
-            then do
-                r <- f
-                modifyMVar_ locks (return . Map.update (Just . pred) lock)
-                return r
-            else unsafeExclusiveLock s ns x lock f -- spin
+    unsafeSharedLock (MemoryStore _ _ locks) (NameSpace ns) _ (LockName lock) f =
+        let lock' = LockName $ ns <> lock
+        in spinLock locks
+                    lock'
+                    (\prev ls -> Map.insert lock' (succ prev) ls)
+                    (Map.update (Just . pred) lock')
+                    f
 
-    unsafeExclusiveLock s@(MemoryStore _ _ locks) ns x lock f = do
-        got_it <-  modifyMVar locks $ \ls -> do
-            let prev = Map.findWithDefault 0 lock ls 
-            return $
-                if prev /= 0
-                    then (ls, False)
-                    else (Map.insert lock (-1) ls, True)
-        if got_it
-            then do
-                r <- f
-                modifyMVar_ locks (return . Map.delete lock)
-                return r
-            else unsafeExclusiveLock s ns x lock f -- spin
+    unsafeExclusiveLock (MemoryStore _ _ locks) (NameSpace ns) _ (LockName lock) f =
+        let lock' = LockName $ ns <> lock
+        in spinLock locks
+                    lock'
+                    (\_ ls -> Map.insert lock' (-1) ls)
+                    (Map.delete lock')
+                    f
+
+
+spinLock :: (Ord k, Num a, Eq a)
+         => MVar (Map k a)
+         -> k
+         -> (a -> Map k a -> Map k a)
+         -> (Map k a -> Map k a)
+         -> IO b
+         -> IO b
+spinLock locks lock acquire release f = do
+    got_it <-  modifyMVar locks $ \ls -> do
+        let prev = Map.findWithDefault 0 lock ls
+        return $
+            if prev /= 0
+                then (ls, False)
+                else (acquire prev ls, True)
+    if got_it
+        then do
+            r <- f
+            modifyMVar_ locks (return . release)
+            return r
+        else spinLock locks lock acquire release f -- spin
+
 
 
 
