@@ -206,8 +206,14 @@ maybeRollover s ns bucket_threshold offsets (Tagged (Time latest)) idx = do
     case wr_fld of
         Just max_wr ->
             -- We compare the largest offset (from a write) with the threshold.
-            when (max_wr > bucket_threshold)
-                 (append s ns [(name idx, indexEntry latest buckets)])
+            when (max_wr > bucket_threshold) $
+                withExclusiveLock s ns "write_lock" $ do
+                    -- Now we want to check that the index has not been changed,
+                    -- indicating that another daemon has already handled this
+                    -- rollover.
+                    idx' :: Tagged a Index <- mustFetchIndex s ns
+                    when (idx == idx')
+                         (append s ns [(name idx, indexEntry latest buckets)])
         _ ->
             return ()
 

@@ -83,9 +83,18 @@ registerNamespace s ns s_buckets e_buckets = do
 
 -- | Write a mixed blob of points to the supplied store and namespace.
 writeEncoded :: Store s => s -> NameSpace -> ByteString -> IO ()
-writeEncoded s ns encoded =
-    withExclusiveLock s ns "write_lock" $ do
-        -- Grab the latest index.
+writeEncoded s ns encoded = do
+    -- The write is done within a shared lock to ensure that when a rollover
+    -- occurs we have the latest index, writing with an old version of the
+    -- index could result in data loss.
+    ( s_idx,
+      e_idx,
+      s_offsets,
+      e_offsets,
+      s_latest,
+      e_latest ) <- withSharedLock s ns "write_lock" $ do
+        -- Grab the latest index, a rollover cannot occur whilst we hold the
+        -- shared lock.
         (s_idx, e_idx) <- concurrently (mustFetchIndex s ns)
                                        (mustFetchIndex s ns)
 
@@ -104,9 +113,13 @@ writeEncoded s ns encoded =
                                    (getOffsets s ns SimpleBucketLocation)
                                    s_writes
 
-        let threshold = rolloverThreshold s ns
-        maybeRollover s ns threshold s_offsets s_latest' s_idx
-        maybeRollover s ns threshold e_offsets e_latest' e_idx
+        return (s_idx, e_idx, s_offsets, e_offsets, s_latest', e_latest')
+
+
+    -- Now that the lock has been released, try to do the rollover.
+    let threshold = rolloverThreshold s ns
+    maybeRollover s ns threshold s_offsets s_latest s_idx
+    maybeRollover s ns threshold e_offsets e_latest e_idx
 
 -- | Request a range of simple points at the given addresses, returns a
 -- producer of chunks of points, each chunk is non-overlapping and ordered,
