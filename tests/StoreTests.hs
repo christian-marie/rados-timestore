@@ -26,6 +26,7 @@ import Test.QuickCheck hiding (reason, theException)
 import Test.QuickCheck.Monadic
 import TimeStore
 import TimeStore.Core
+import Control.Concurrent(threadDelay)
 
 newtype ValidBS
     = ValidBS { unValidBS :: ByteString }
@@ -68,6 +69,11 @@ testStore store =  do
 testNS :: NameSpace
 testNS = NameSpace "PONIES"
 
+-- Testing locks is hard, you will probably want to prove yours in some other
+-- way.
+-- 
+-- However, this might catch pathologically bad locks. Increasing the
+-- threadDelay for a more latent store might help you find bugs.
 lockTest :: forall s. Store s => IO s -> Expectation
 lockTest store = do
     s <- store
@@ -75,8 +81,16 @@ lockTest store = do
 
     as <- replicateM 100 . async . withExclusiveLock s testNS "a_lock" $ do
         n <- readCtr s
+        threadDelay 1
         writeCtr s (succ n)
-    mapM_ wait as
+
+    bs <- replicateM 100 . async . withSharedLock s testNS "a_lock" $ do
+        n <- readCtr s
+        threadDelay 1
+        n' <- readCtr s
+        when (n /= n') (error "oh noes, lock didn't lock!")
+
+    mapM_ wait (as ++ bs)
 
     readCtr s >>= (`shouldBe` 100)
   where

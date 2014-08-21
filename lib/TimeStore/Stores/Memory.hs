@@ -35,11 +35,14 @@ import TimeStore.Core
 newtype Key = Key ByteString
   deriving (Eq, Ord, Show)
 
+newtype RefCount = RefCount Int
+  deriving (Eq, Ord, Show, Enum, Bounded, Real, Num, Integral)
+
 key :: NameSpace -> ObjectName -> Key
 key (NameSpace ns) (ObjectName on) = Key ("02_" <> ns <> "_" <> on)
 
 data MemoryStore
-    = MemoryStore Word64 (MVar (Map Key ByteString)) (MVar [LockName])
+    = MemoryStore Word64 (MVar (Map Key ByteString)) (MVar (Map LockName RefCount))
 
 -- | Create a new in-memory store with the provided minimum size for rollover.
 memoryStore :: Word64 -> IO MemoryStore
@@ -78,17 +81,34 @@ instance Store MemoryStore where
 
     reifySize _ = return
 
-    unsafeExclusiveLock s@(MemoryStore _ _ locks) ns x lock f = do
-        got_it <- modifyMVar locks $ \ls ->
-            return (if lock `elem` ls
-                then (ls, False)
-                else (lock:ls, True))
+    unsafeSharedLock s@(MemoryStore _ _ locks) ns x lock f = do
+        got_it <- modifyMVar locks $ \ls -> do
+            let prev = Map.findWithDefault 0 lock ls 
+            return $
+                if prev == -1
+                    then (ls, False) -- Exclusively locked
+                    else (Map.insert lock (succ prev) ls, True)
         if got_it
             then do
                 r <- f
-                modifyMVar_ locks (return . filter (/= lock))
+                modifyMVar_ locks (return . Map.update (Just . pred) lock)
                 return r
-            else unsafeExclusiveLock s ns x lock f
+            else unsafeExclusiveLock s ns x lock f -- spin
+
+    unsafeExclusiveLock s@(MemoryStore _ _ locks) ns x lock f = do
+        got_it <-  modifyMVar locks $ \ls -> do
+            let prev = Map.findWithDefault 0 lock ls 
+            return $
+                if prev /= 0
+                    then (ls, False)
+                    else (Map.insert lock (-1) ls, True)
+        if got_it
+            then do
+                r <- f
+                modifyMVar_ locks (return . Map.delete lock)
+                return r
+            else unsafeExclusiveLock s ns x lock f -- spin
+
 
 
 mergeWith :: (ByteString -> ByteString -> ByteString)
