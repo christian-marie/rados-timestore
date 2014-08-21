@@ -227,7 +227,7 @@ updateLatest :: Store s => s
              -> Tagged Simple Time
              -> Tagged Extended Time
              -> IO (Tagged Simple Time, Tagged Extended Time)
-updateLatest s ns s_time e_time = withLock s ns "latest_update" $ do
+updateLatest s ns s_time e_time = withExclusiveLock s ns "latest_update" $ do
     latests <- fetchs s ns [simpleLatest, extendedLatest]
     case latests & traversed . traversed %~ parse of
         [Just s_latest, Just e_latest] -> do

@@ -62,7 +62,7 @@ testStore store =  do
                 propAppendWrite store
             prop "sizes are sizes" $
                 propSizes store
-            it "has a well behaved lock" $
+            it "has a well behaved exclusive lock" $
                 lockTest store
 
 testNS :: NameSpace
@@ -73,7 +73,7 @@ lockTest store = do
     s <- store
     writeCtr s 0
 
-    as <- replicateM 100 . async . withLock s testNS "a_lock" $ do
+    as <- replicateM 100 . async . withExclusiveLock s testNS "a_lock" $ do
         n <- readCtr s
         writeCtr s (succ n)
     mapM_ wait as

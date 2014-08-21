@@ -82,7 +82,7 @@ registerNamespace s ns s_buckets e_buckets = do
 -- | Write a mixed blob of points to the supplied store and namespace.
 writeEncoded :: Store s => s -> NameSpace -> ByteString -> IO ()
 writeEncoded s ns encoded =
-    withLock s ns "write_lock" $ do
+    withExclusiveLock s ns "write_lock" $ do
         -- Grab the latest index.
         (s_idx, e_idx) <- mustFetchIndexes s ns
 

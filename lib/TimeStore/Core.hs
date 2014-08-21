@@ -101,23 +101,39 @@ class Store s where
     sizes :: s -> NameSpace -> [ObjectName] -> IO [Maybe Word64]
     sizes s ns objs = mapM (size s ns) objs >>= mapM (reifySize s)
 
-    -- | Take a lock with the given expiry. If a lock remains after this expiry
-    -- then there are no guarantees that we can recover from a deadlock.
-    unsafeLock :: s -> NameSpace -> Int -> LockName -> IO a -> IO a
+    -- | Take an exclusive lock with the given expiry. If a lock remains after
+    -- this expiry then there are no guarantees that we can recover from a
+    -- deadlock.
+    unsafeExclusiveLock :: s -> NameSpace -> Int -> LockName -> IO a -> IO a
+
+    -- | A shared lock. Many may hold this lock until an exclusive lock is
+    -- taken.
+    unsafeSharedLock :: s -> NameSpace -> Int -> LockName -> IO a -> IO a
 
     -- | Safely acquire a lock, if your action takes longer than a (arbitrary)
     -- timeout, then we will be forced to abort() so that nothing is broken.
-    withLock :: s -> NameSpace -> LockName -> IO a -> IO a
-    withLock s ns ln f =
-        unsafeLock s ns lockTimeout ln $ do
-            r <- race (threadDelay (lockTimeout * 1000000)) f
-            case r of
-                Left () -> do
-                    putStrLn "withLock: Aborting due to lock timeout"
-                    raiseSignal sigABRT
-                    error "withLock: highly improbable"
+    withExclusiveLock :: s -> NameSpace -> LockName -> IO a -> IO a
+    withExclusiveLock s ns ln f =
+        unsafeExclusiveLock s ns (succ lockTimeout) ln (watchDog "withExclusiveLock" f)
 
-                Right v -> return v
+    -- | Safely acquire shared lock.
+    withSharedLock :: s -> NameSpace -> LockName -> IO a -> IO a
+    withSharedLock s ns ln f =
+        unsafeSharedLock s ns (succ lockTimeout) ln (watchDog "withExclusiveLock" f)
+
+
+
+-- | Run the action for at most lock timeout time, then
+watchDog :: String -> IO a -> IO a
+watchDog msg f = msg `seq` do
+    r <- race (threadDelay (lockTimeout * 1000000)) f
+    case r of
+        Left () -> do
+            putStrLn $ msg ++ ": Aborting due to lock timeout"
+            raiseSignal sigABRT
+            error $ msg ++ ": highly improbable"
+
+        Right v -> return v
 
 -- | In order to recover from a possible deadlock, we request that any locks
 -- are broken after this timeout.

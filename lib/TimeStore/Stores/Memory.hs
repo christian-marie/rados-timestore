@@ -78,7 +78,7 @@ instance Store MemoryStore where
 
     reifySize _ = return
 
-    unsafeLock s@(MemoryStore _ _ locks) ns x lock f = do
+    unsafeExclusiveLock s@(MemoryStore _ _ locks) ns x lock f = do
         got_it <- modifyMVar locks $ \ls ->
             return (if lock `elem` ls
                 then (ls, False)
@@ -88,7 +88,7 @@ instance Store MemoryStore where
                 r <- f
                 modifyMVar_ locks (return . filter (/= lock))
                 return r
-            else unsafeLock s ns x lock f
+            else unsafeExclusiveLock s ns x lock f
 
 
 mergeWith :: (ByteString -> ByteString -> ByteString)
