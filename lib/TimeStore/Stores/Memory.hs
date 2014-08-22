@@ -60,8 +60,8 @@ dumpMemoryStore (MemoryStore _ objects locks) = do
 
 
 instance Store MemoryStore where
-    type FetchFuture = Maybe ByteString
-    type SizeFuture = Maybe Word64
+    type FetchFuture MemoryStore = ByteString
+    type SizeFuture MemoryStore = Maybe Word64
 
     rolloverThreshold (MemoryStore s _ _ )  _ =  s
 
@@ -69,8 +69,11 @@ instance Store MemoryStore where
 
     write = mergeWith const
 
-    fetch (MemoryStore _ objects _) ns obj =
-        withMVar objects (return . Map.lookup (key ns obj))
+    fetch (MemoryStore _ objects _) ns obj _ =
+        -- Return "" on no object. This is a little odd, but it's the way the
+        -- rados API works in that we want to grab the size first, and so you
+        -- should know by now if an object doesn't exist.
+        withMVar objects (return . Map.findWithDefault mempty (key ns obj))
 
     reifyFetch _ = return
 

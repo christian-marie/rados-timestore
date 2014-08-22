@@ -109,12 +109,11 @@ enumerate :: Store s
           -> Producer ByteString IO ()
 enumerate s user_ns = do
     let ns = namespaceNamespace user_ns
-    let objs = [(name (SimpleBucketLocation (0, x))
-                ,name (ExtendedBucketLocation (0, x)))
-               | x <- [0,2..mutableBuckets]]
+    let buckets = [0,2..mutableBuckets]
+    let s_objs = [name (SimpleBucketLocation (0, x))  | x <- buckets]
+    let e_objs = [name (ExtendedBucketLocation (0, x)) | x <- buckets]
 
-    buffered readAhead (each objs >-> P.mapM (both $ fetch s ns) )
-    >-> P.mapM (both $ reifyFetch s)
+    zipProducers (streamObjects s ns s_objs) (streamObjects s ns e_objs)
     >-> P.map sequenceT
     >-> P.concat
     >-> P.map (uncurry processMutable)

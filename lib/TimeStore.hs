@@ -33,6 +33,12 @@ module TimeStore
     isRegistered,
     fetchIndex,
 
+    -- * Rados store (ceph)
+    RadosStore(..),
+    radosStore,
+    cleanupRadosStore,
+    withRadosStore,
+
     -- * Memory store (testing)
     MemoryStore,
     memoryStore,
@@ -56,6 +62,7 @@ import TimeStore.Core
 import TimeStore.Index
 import TimeStore.StoreHelpers
 import TimeStore.Stores.Memory
+import TimeStore.Stores.Rados
 
 -- | Check if a namespace is registered.
 isRegistered :: Store s => s -> NameSpace -> IO Bool
@@ -135,10 +142,9 @@ readSimple s ns start end addrs = do
     (Tagged s_ix) :: Tagged Simple Index <- lift (mustFetchIndex s ns)
     let objs = targetObjs s_ix start end addrs (name . SimpleBucketLocation)
 
-    buffered readAhead (each objs >-> P.mapM (fetch s ns))
-    >-> P.mapM (reifyFetch s)                  -- Load buckets into memory.
-    >-> P.concat                               -- Just bs -> bs.
-    >-> P.map (processSimple start end addrs)  -- Final processing.
+    streamObjects s ns objs
+    >-> P.concat
+    >-> P.map (processSimple start end addrs)
     >-> P.filter (not . S.null)
 
 -- | Request a range of simple points at the given addresses, returns a
@@ -156,12 +162,7 @@ readExtended s ns start end addrs = do
     let s_objs = targetObjs e_ix start end addrs (name . SimpleBucketLocation)
     let e_objs = targetObjs e_ix start end addrs (name . ExtendedBucketLocation)
 
-    -- There's probably a nicer abstraction for zipping two pipes together, we
-    -- just use a tuple explicitly.
-    let objs = zip s_objs e_objs
-
-    buffered readAhead (each objs >-> P.mapM (both $ fetch s ns) )
-    >-> P.mapM (both $ reifyFetch s) -- Load buckets into memory.
+    zipProducers (streamObjects s ns s_objs) (streamObjects s ns e_objs)
     >-> P.map sequenceT  -- Ensure both or neither are there.
     >-> P.concat         -- Maybe (s_bs,e_bs) -> (s_bs,e_bs.)
     >-> P.map (uncurry (processExtended start end addrs))

@@ -26,7 +26,8 @@ library
                      TimeStore.Index,
                      TimeStore.Core,
                      TimeStore.StoreHelpers,
-                     TimeStore.Stores.Memory
+                     TimeStore.Stores.Memory,
+                     TimeStore.Stores.Rados
                      
   build-depends:     base >=3 && <5,
                      bytestring,
@@ -44,7 +45,7 @@ library
                      spool,
                      tagged,
                      containers,
-                     rados-haskell >= 3.0.3
+                     rados-haskell >= 3.1.0
 
   ghc-options:       -O2
                      -threaded
@@ -77,7 +78,8 @@ test-suite           unit-tests
                      tagged,
                      containers,
                      spool,
-                     rados-timestore
+                     rados-timestore,
+                     rados-haskell >= 3.1.0
   ghc-options:       -threaded
   ghc-prof-options:  -auto-all
 
@@ -106,7 +108,8 @@ test-suite           fuzzy-tests
                      tagged,
                      containers,
                      spool,
-                     rados-timestore
+                     rados-timestore,
+                     rados-haskell >= 3.1.0
   ghc-options:       -threaded
   ghc-prof-options:  -auto-all
 
@@ -134,7 +137,8 @@ test-suite           store-tests
                      tagged,
                      containers,
                      spool,
-                     rados-timestore
+                     rados-timestore,
+                     rados-haskell >= 3.1.0
   ghc-options:       -threaded
   ghc-prof-options:  -auto-all
 

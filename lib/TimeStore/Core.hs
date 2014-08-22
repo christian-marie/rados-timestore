@@ -47,6 +47,7 @@ import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.String (IsString)
+import Data.Traversable (for, traverse)
 import Data.Word (Word64)
 import Foreign.Ptr
 import Foreign.Storable
@@ -65,8 +66,8 @@ import Text.Printf
 --
 -- This has the bonus of clearly enumerating the back-end interactions.
 class Store s where
-    type FetchFuture :: *
-    type SizeFuture :: *
+    type FetchFuture s
+    type SizeFuture s
 
     -- | Get the rollover threshould for a given store and namespace. This is
     -- the minumum size that a bucket should be in order for us to select a new
@@ -80,35 +81,41 @@ class Store s where
     -- | Overwrite a series of buckets
     write :: s -> NameSpace -> [(ObjectName, ByteString)] -> IO ()
 
-    -- | Begin fetching the contents of a bucket
-    fetch :: s -> NameSpace -> ObjectName -> IO FetchFuture
+    -- | Begin fetching the contents of a bucket with the provided size
+    fetch :: s -> NameSpace -> ObjectName -> Word64 -> IO (FetchFuture s)
 
-    -- | Retrieve the contents of a FetchFuture, Nothing if the bucket didn't
-    -- exit
-    reifyFetch :: s -> FetchFuture -> IO (Maybe ByteString)
+    -- | Retrieve the contents of a FetchFuture
+    reifyFetch :: s -> FetchFuture s -> IO ByteString
 
     -- | Fetch a series of buckets in parallel
     fetchs :: s -> NameSpace -> [ObjectName] -> IO [Maybe ByteString]
-    fetchs s ns objs = mapM (fetch s ns) objs >>= mapM (reifyFetch s)
+    fetchs s ns objs = do
+        -- Maybe fetch the sizes for our objects
+        m_szs <- sizes s ns objs
+        -- For those that worked, begin fetching the contents.
+        m_fetches <- for (zip objs m_szs) $ \(obj, m_sz) ->
+            traverse (fetch s ns obj) m_sz
+        -- Now try to reify the contents for those that have any
+        (traverse . traverse) (reifyFetch s) m_fetches
 
     -- | Begin getting the size of a bucket
-    size :: s -> NameSpace -> ObjectName -> IO SizeFuture
+    size :: s -> NameSpace -> ObjectName -> IO (SizeFuture s)
 
     -- | Retrieve the size of a SizeFuture, Nothing if the bucket didn't exist.
-    reifySize :: s -> SizeFuture -> IO (Maybe Word64)
+    reifySize :: s -> SizeFuture s -> IO (Maybe Word64)
 
     -- | Fetch a series of sizes in parallel
     sizes :: s -> NameSpace -> [ObjectName] -> IO [Maybe Word64]
-    sizes s ns objs = mapM (size s ns) objs >>= mapM (reifySize s)
+    sizes s ns objs = traverse (size s ns) objs >>= traverse (reifySize s)
 
     -- | Take an exclusive lock with the given expiry. If a lock remains after
     -- this expiry then there are no guarantees that we can recover from a
     -- deadlock.
-    unsafeExclusiveLock :: s -> NameSpace -> Int -> LockName -> IO a -> IO a
+    unsafeExclusiveLock :: s -> NameSpace -> Double -> LockName -> IO a -> IO a
 
     -- | A shared lock. Many may hold this lock until an exclusive lock is
     -- taken.
-    unsafeSharedLock :: s -> NameSpace -> Int -> LockName -> IO a -> IO a
+    unsafeSharedLock :: s -> NameSpace -> Double -> LockName -> IO a -> IO a
 
     -- | Safely acquire a lock, if your action takes longer than a (arbitrary)
     -- timeout, then we will be forced to abort() so that nothing is broken.
@@ -126,7 +133,7 @@ class Store s where
 -- | Run the action for at most lock timeout time, then
 watchDog :: String -> IO a -> IO a
 watchDog msg f = msg `seq` do
-    r <- race (threadDelay (lockTimeout * 1000000)) f
+    r <- race (threadDelay (ceiling lockTimeout * 1000000)) f
     case r of
         Left () -> do
             putStrLn $ msg ++ ": Aborting due to lock timeout"
@@ -139,7 +146,7 @@ watchDog msg f = msg `seq` do
 -- are broken after this timeout.
 --
 -- As a result we *must* abort any operation that takes longer than this.
-lockTimeout :: Int
+lockTimeout :: Double
 lockTimeout = 120 -- seconds
 
 -- | An ObjectName can be used to retrieve an object's data from the backend.

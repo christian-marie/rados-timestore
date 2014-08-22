@@ -8,6 +8,7 @@
 --
 
 {-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -50,21 +51,26 @@ instance Arbitrary ByteString where
     arbitrary =
         S.pack <$> arbitrary
 
+type With x = forall a. (x -> IO a) -> IO a
+
 main :: IO ()
 main =
-    hspec $
-        describe "memory store" $ testStore (memoryStore 64)
+    hspec $ do
+        describe "memory store" $
+            testStore (memoryStore 64 >>=)
+        describe "rados store" $
+            testStore (withRadosStore Nothing "/etc/ceph/ceph.conf" "test" 64)
 
-testStore :: Store s => IO s -> SpecM ()
-testStore store =  do
-            prop "appending list is same as mconcat" $
-                propAppendConcat store
-            prop "overwriting writes after appending subset is writes" $
-                propAppendWrite store
-            prop "sizes are sizes" $
-                propSizes store
-            it "has a well behaved exclusive lock" $
-                lockTest store
+testStore :: Store s => With s -> SpecM ()
+testStore ws =  do
+     prop "appending list is same as mconcat" $
+         propAppendConcat ws
+     prop "overwriting writes after appending subset is writes" $
+         propAppendWrite ws
+     prop "sizes are sizes" $
+         propSizes ws
+     it "has a well behaved exclusive lock" $
+         lockTest ws
 
 testNS :: NameSpace
 testNS = NameSpace "PONIES"
@@ -74,9 +80,8 @@ testNS = NameSpace "PONIES"
 --
 -- However, this might catch pathologically bad locks. Increasing the
 -- threadDelay for a more latent store might help you find bugs.
-lockTest :: forall s. Store s => IO s -> Expectation
-lockTest store = do
-    s <- store
+lockTest :: Store s => With s -> Expectation
+lockTest ws = ws $ \s -> do
     writeCtr s 0
 
     as <- replicateM 100 . async . withExclusiveLock s testNS "a_lock" $ do
@@ -97,39 +102,38 @@ lockTest store = do
     ctr :: ObjectName
     ctr = "counter"
 
-    writeCtr :: s -> Int -> IO ()
+
+    writeCtr :: Store s => s -> Int -> IO ()
     writeCtr s n = write s testNS [(ctr, S.pack . show $ n)]
 
-    readCtr :: s -> IO Int
+    readCtr :: Store s => s -> IO Int
     readCtr s = do
         [Just n] <- fetchs s testNS [ctr]
         return . read . S.unpack $ n
 
 propSizes :: Store s
-          => IO s
+          => With s
           -> NameSpace
           -> NonEmptyList (ObjectName, ByteString)
           -> Property
-propSizes store ns (NonEmpty writes) =
+propSizes ws ns (NonEmpty writes) =
     monadicIO $ do
         let unique_writes = nubBy ((==) `on` fst) writes
-        xs <- run $ do
-            s <- store
+        xs <- run . ws $ \s -> do
             write s ns unique_writes
             sizes s ns (map fst unique_writes)
         let expected = map (Just . fromIntegral . S.length . snd) unique_writes
         assert (xs == expected)
 
 propAppendConcat :: Store s
-                 => IO s
+                 => With s
                  -> NameSpace
                  -> ObjectName
                  -> NonEmptyList ByteString
                  -> Property
-propAppendConcat store ns obj (NonEmpty bss) =
+propAppendConcat ws ns obj (NonEmpty bss) =
     monadicIO $ do
-        xs <- run $ do
-            s <- store
+        xs <- run . ws $ \s -> do
             forM_ bss $ \bs ->
                 append s ns [(obj, bs)]
             fetchs s ns [obj]
@@ -137,17 +141,16 @@ propAppendConcat store ns obj (NonEmpty bss) =
 
 -- | This will also test the ordering of duplicate writes.
 propAppendWrite :: Store s
-                 => IO s
-                 -> NameSpace
-                 -> NonEmptyList (ObjectName, ByteString)
-                 -> Positive Int
-                 -> Property
-propAppendWrite store ns (NonEmpty writes) (Positive rand) =
+                => With s
+                -> NameSpace
+                -> NonEmptyList (ObjectName, ByteString)
+                -> Positive Int
+                -> Property
+propAppendWrite ws ns (NonEmpty writes) (Positive rand) =
     monadicIO $ do
         -- We want only the last writes to each object
         let unique_writes = reverse . nubBy ((==) `on` fst) . reverse $ writes
-        xs <- run $ do
-            s <- store
+        xs <- run . ws $ \s -> do
             let appends = take (length writes `mod` rand) unique_writes
             append s ns appends
             write s ns writes
