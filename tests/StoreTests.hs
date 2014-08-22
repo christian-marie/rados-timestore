@@ -75,17 +75,43 @@ main =
 
 testStore :: Store s => With s -> SpecM ()
 testStore ws =  do
-     prop "appending list is same as mconcat" $
-         propAppendConcat ws
-     prop "overwriting writes after appending subset is writes" $
-         propAppendWrite ws
-     prop "sizes are sizes" $
-         propSizes ws
-     it "has a well behaved exclusive lock" $
-         lockTest ws
+    it "correctly namespaces writes" $
+        nsTest ws
+    it "doesn't find non-existant file" $
+        nonExistantTest ws
+    prop "appending list is same as mconcat" $
+        propAppendConcat ws
+    prop "overwriting writes after appending subset is writes" $
+        propAppendWrite ws
+    prop "sizes are sizes" $
+        propSizes ws
+    it "has a well behaved exclusive lock" $
+        lockTest ws
 
 testNS :: NameSpace
 testNS = NameSpace "PONIES"
+
+nonExistantTest :: Store s => With s -> Expectation
+nonExistantTest ws = ws $ \s ->
+    fetchs s testNS ["wat"] >>=
+        (`shouldBe` [Nothing])
+
+nsTest :: Store s => With s -> Expectation
+nsTest ws = ws $ \s -> do
+    -- Write to the same object in two namespaces and expect them to be
+    -- different.
+    let ns_a = NameSpace "a"
+    let ns_b = NameSpace "b"
+    let obj = "object"
+    write s ns_a [(obj, "a")]
+    write s ns_b [(obj, "b")]
+
+    [Just a] <- fetchs s ns_a [obj]
+    [Just b] <- fetchs s ns_b [obj]
+
+    a `shouldBe` "a"
+    b `shouldBe` "b"
+
 
 -- Testing locks is hard, you will probably want to prove yours in some other
 -- way.
