@@ -21,6 +21,7 @@ import qualified Data.ByteString.Char8 as S
 import Data.Function
 import Data.List
 import Data.Monoid
+import qualified System.Rados.Monadic as R
 import Test.Hspec
 import Test.Hspec.Core (SpecM)
 import Test.Hspec.QuickCheck
@@ -53,13 +54,24 @@ instance Arbitrary ByteString where
 
 type With x = forall a. (x -> IO a) -> IO a
 
+cephConf :: FilePath
+cephConf = "/etc/ceph/ceph.conf"
+
+-- | Cleanup the "test" pool then run the action
+withTestRadosStore :: (RadosStore -> IO a) -> IO a
+withTestRadosStore f = do
+    R.runConnect Nothing (R.parseConfig cephConf) . R.runPool "test" $
+        R.unsafeObjects >>= mapM_ (`R.runObject` R.remove)
+
+    withRadosStore Nothing cephConf "test" 64  f
+
 main :: IO ()
 main =
     hspec $ do
         describe "memory store" $
             testStore (memoryStore 64 >>=)
         describe "rados store" $
-            testStore (withRadosStore Nothing "/etc/ceph/ceph.conf" "test" 64)
+            testStore withTestRadosStore
 
 testStore :: Store s => With s -> SpecM ()
 testStore ws =  do

@@ -97,7 +97,7 @@ instance Store RadosStore where
 
     fetch (RadosStore _ ctx _) ns obj sz = do
         c <- newCompletion
-        m_err <- asyncRead ctx c (oid ns obj) 0 sz
+        m_err <- asyncRead ctx c (oid ns obj) sz 0
         case m_err of
             Left e -> throwIO e
             Right bs ->

@@ -1,3 +1,4 @@
 * unsafePartsOf appears in more than one place, need to remove that
   duplication.
 * handle exceptions and bad input data correctly
+* more store tests: namespacing, non-existant objects
