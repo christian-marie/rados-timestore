@@ -172,9 +172,10 @@ writeMutableBlob s ns addr t bs = do
     let s_idx = Tagged idx
     let e_idx = Tagged idx
 
-    let (s_writes, e_writes, p_writes, _, _) = groupMixed s_idx e_idx blob
-
-    void $ writeBuckets s ns s_writes e_writes p_writes
+    case groupMixed s_idx e_idx blob of
+        Right (s_writes, e_writes, p_writes, _, _) ->
+            void $ writeBuckets s ns s_writes e_writes p_writes
+        Left e -> throwIO . InvalidPayload $ e
 
 -- | Find the offsets of a batch of objects.
 --

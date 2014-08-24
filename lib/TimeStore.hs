@@ -47,6 +47,7 @@ module TimeStore
 
 import Control.Applicative
 import Control.Concurrent.Async
+import Control.Exception
 import Control.Lens hiding (Index, Simple, each, index)
 import Control.Monad
 import Data.ByteString (ByteString)
@@ -106,8 +107,10 @@ writeEncoded s ns encoded = do
                                        (mustFetchIndex s ns)
 
         -- Collate points into epochs and buckets
-        let (s_writes, e_writes, p_writes,
-             s_latest, e_latest) = groupMixed s_idx e_idx encoded
+        (s_writes, e_writes, p_writes,
+             s_latest, e_latest) <- case groupMixed s_idx e_idx encoded of
+                                        Left e -> throwIO . InvalidPayload $ e
+                                        Right x -> return x
 
         -- Merge our latest with everyone's latest.
         (s_latest', e_latest') <- updateLatest s ns s_latest e_latest

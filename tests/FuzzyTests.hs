@@ -244,7 +244,7 @@ propImmutableStore (ImmutableWrites addrs writes p)
 
 propGroupsPoints :: Index -> Index -> MixedPayload -> Bool
 propGroupsPoints ix1 ix2 (MixedPayload x) =
-    let (_, _, _,
+    let Right (_, _, _,
          Tagged s_max, Tagged e_max) = groupMixed (Tagged ix1)  (Tagged ix2) x
     -- There is only one invariant I can think of given no knowledge of
     -- incoming data. The simple max should be less than or equal to the

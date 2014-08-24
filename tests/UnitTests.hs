@@ -9,6 +9,7 @@
 {-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+import Control.Exception
 import Control.Lens hiding (Index, Simple, index)
 import Control.Monad
 import Data.ByteString (ByteString)
@@ -187,7 +188,9 @@ writeEncodedBlob = do
 
 groupSimple :: Expectation
 groupSimple =
-    groupMixed simpleIndex extendedIndex simplePoints `shouldBe` grouped
+    case groupMixed simpleIndex extendedIndex simplePoints of
+        Left e -> throwIO e
+        Right x -> x `shouldBe` grouped
   where
     grouped :: ( Map (Epoch, Bucket) SimpleWrite
                 , Map (Epoch, Bucket) ExtendedWrite
@@ -267,7 +270,7 @@ writeLazyIso = iso (toLazyByteString . unSimpleWrite)
 
 groupExtended :: Expectation
 groupExtended = do
-    let x@(_, _, ptrs, _, _)  = groupMixed simpleIndex extendedIndex extendedPoints
+    let Right x@(_, _, ptrs, _, _) = groupMixed simpleIndex extendedIndex extendedPoints
     x `shouldBe` grouped
     let s_wr = ptrs & traverse %~ (\(PointerWrite _ f) -> toLazyByteString $ f 0 oss)
     s_wr `shouldBe` simpleWrites

@@ -25,7 +25,6 @@ module TimeStore.Mutable
 ) where
 
 import Control.Applicative
-import Control.Lens hiding (Index, Simple, each, index)
 import Control.Monad
 import Data.Bits
 import Data.ByteString (ByteString)

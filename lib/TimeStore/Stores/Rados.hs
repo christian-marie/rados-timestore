@@ -39,7 +39,7 @@ radosStore user cfg pool threshold = do
     h <- newConnection user
     m_e <- confReadFile h cfg
     case m_e of
-        Just e -> throwIO e
+        Just e -> throwIO . StoreFailure $ e
         Nothing -> do
             connect h
             ctx <- newIOContext h pool
@@ -79,7 +79,7 @@ mapAsync ctx ns xs f =  do
         c <- newCompletion
         m_err <- f ctx c (oid ns obj) bs
         case m_err of
-            Left e -> throwIO e
+            Left e -> throwIO . StoreFailure $ e
             Right _ -> return c
     mapM_ waitForSafe cs
 
@@ -99,21 +99,21 @@ instance Store RadosStore where
         c <- newCompletion
         m_err <- asyncRead ctx c (oid ns obj) sz 0
         case m_err of
-            Left e -> throwIO e
+            Left e -> throwIO . StoreFailure $ e
             Right bs ->
                 return (c, bs)
 
     reifyFetch _ (c, bs) = do
         waitForComplete c
         e <- getAsyncError c
-        either throwIO (return . const bs) e
+        either (throwIO . StoreFailure) (return . const bs) e
 
 
     size (RadosStore _ ctx _) ns obj = do
         c <- newCompletion
         m_err <- asyncStat ctx c (oid ns obj)
         case m_err of
-            Left e -> throwIO e
+            Left e -> throwIO . StoreFailure $ e
             Right (fp_sz, _) ->
                 return (c, fp_sz)
 
@@ -122,7 +122,7 @@ instance Store RadosStore where
         e <- getAsyncError c
         case e of
             Left (NoEntity{}) -> return Nothing
-            Left err          -> throwIO err
+            Left err          -> throwIO . StoreFailure $ err
             Right _           -> Just <$> withForeignPtr fp_sz peek
 
     unsafeExclusiveLock (RadosStore _ ctx _) ns timeout (LockName ln) f = do

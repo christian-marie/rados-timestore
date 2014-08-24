@@ -7,47 +7,60 @@
 -- the 3-clause BSD licence.
 --
 
+{-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE EmptyDataDecls             #-}
 {-# LANGUAGE ExistentialQuantification  #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 
 module TimeStore.Core
 (
+    -- * User facing types
+    Store(..),
+    NameSpace(..),
+    nameSpace,
+    Address(..),
+    address,
+    time,
+    payload,
+    Time(..),
+
+    -- * Internal types
     Bucket(..),
     ObjectName(..),
     Nameable(..),
     LockName(..),
-    Store(..),
     Point(..),
-    address,
-    time,
-    payload,
-    NameSpace(..),
-    nameSpace,
     Epoch(..),
-    Address(..),
-    Time(..),
     LatestFile(..),
     Simple,
     Extended,
     SimpleBucketLocation(..),
     ExtendeBucketLocation(..),
-    placeBucket
+
+    -- * Utility
+    placeBucket,
+
+    -- * Exceptions
+    InvalidPayload(..),
+    StoreFailure(..),
 ) where
 
 import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Exception
 import Control.Lens (makeLenses)
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.String (IsString)
 import Data.Traversable (for, traverse)
+import Data.Typeable
 import Data.Word (Word64)
 import Foreign.Ptr
 import Foreign.Storable
@@ -256,3 +269,16 @@ instance Storable Point where
 placeBucket :: Bucket -> Address -> Bucket
 placeBucket (Bucket max_buckets) (Address addr) =
     Bucket $ (addr `clearBit` 0) `mod` max_buckets
+
+data InvalidPayload
+    = forall e. Exception e => InvalidPayload e
+  deriving (Typeable)
+
+data StoreFailure
+    = forall e. Exception e => StoreFailure e
+  deriving (Typeable)
+
+instance Exception InvalidPayload
+instance Exception StoreFailure
+deriving instance Show InvalidPayload
+deriving instance Show StoreFailure

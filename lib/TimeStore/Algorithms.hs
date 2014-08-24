@@ -23,6 +23,7 @@ module TimeStore.Algorithms
 ) where
 
 import Control.Applicative
+import Control.Exception
 import Control.Monad
 import Control.Monad.Primitive (PrimMonad, PrimState)
 import Control.Monad.ST (runST)
@@ -111,19 +112,20 @@ groupMixed :: Tagged Simple Index
            -> Tagged Extended Index
            -> ByteString
            -- Holy tuples batman!
-           -> (Map (Epoch,Bucket) SimpleWrite,
-               Map (Epoch,Bucket) ExtendedWrite,
-               Map (Epoch,Bucket) PointerWrite,
-               Tagged Simple Time,
-               Tagged Extended Time)
+           -> Either SomeException
+                     (Map (Epoch,Bucket) SimpleWrite,
+                      Map (Epoch,Bucket) ExtendedWrite,
+                      Map (Epoch,Bucket) PointerWrite,
+                      Tagged Simple Time,
+                      Tagged Extended Time)
 groupMixed (Tagged s_idx) (Tagged e_idx) input = go mempty mempty mempty (Tagged 0) (Tagged 0) 0
   where
     -- Look through the input string, indexed by os.
     go !s_map !e_map !p_map !s_latest !e_latest !os
         | fromIntegral os >= S.length input =
-            (s_map, e_map, p_map, s_latest, e_latest)
+            return (s_map, e_map, p_map, s_latest, e_latest)
         | otherwise = do
-            let Point addr t len = parsePointAt os input
+            Point addr t len <- parsePointAt os input
             let !s_loc = locationLookup t addr s_idx
             let !s_latest' = if t > untag s_latest then Tagged t else s_latest
 
@@ -139,8 +141,8 @@ groupMixed (Tagged s_idx) (Tagged e_idx) input = go mempty mempty mempty (Tagged
                     --
                     -- When a newer version is released, the check can be
                     -- removed.
-                    let e_bytes = if len == 0
-                                    then mempty
+                    e_bytes <- if len == 0
+                                    then return mempty
                                     else getBuilderAt (os + 24) len input
 
                     let e_wr = ExtendedWrite (word64LE len <> e_bytes)
@@ -157,7 +159,7 @@ groupMixed (Tagged s_idx) (Tagged e_idx) input = go mempty mempty mempty (Tagged
                     go s_map e_map' p_map' s_latest' e_latest' (os + 24 + len)
                 -- This one is simple
                 else do
-                    let s_wr = SimpleWrite (getBuilderAt os 24 input)
+                    s_wr <- SimpleWrite <$> getBuilderAt os 24 input
                     -- Shortcut the mappend here so that we don't need to
                     -- concatenate many thousands of mempties.
                     let s_map' = Map.insertWith (flip mappend) s_loc s_wr s_map
@@ -175,19 +177,18 @@ groupMixed (Tagged s_idx) (Tagged e_idx) input = go mempty mempty mempty (Tagged
             Just os -> word64LE addr <> word64LE time' <> word64LE (os + base_os)
 
 -- | Read a point from an offset into a ByteString.
-parsePointAt :: Word64 -> ByteString -> Point
-parsePointAt os bs = flip runUnpacking bs $ do
+parsePointAt :: Word64 -> ByteString -> Either SomeException Point
+parsePointAt os bs = flip tryUnpacking bs $ do
     unpackSetPosition (fromIntegral os)
     Point <$> (Address <$> getWord64LE)
           <*> (Time <$> getWord64LE)
           <*> getWord64LE
 
 -- | Read from the given offset len bytes, returning a builder of those bytes.
-getBuilderAt :: Word64 -> Word64 -> ByteString -> Builder
-getBuilderAt offset len bs = flip runUnpacking bs $ do
+getBuilderAt :: Word64 -> Word64 -> ByteString -> Either SomeException Builder
+getBuilderAt offset len bs = flip tryUnpacking bs $ do
     unpackSetPosition (fromIntegral offset)
     byteString <$> getBytes (fromIntegral len)
-
 
 -- | Filter out points not within with the given criteria, then sort and
 -- de-duplicate.
