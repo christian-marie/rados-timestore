@@ -77,8 +77,8 @@ testStore :: Store s => With s -> SpecM ()
 testStore ws =  do
     it "correctly namespaces writes" $
         nsTest ws
-    it "doesn't find non-existant file" $
-        nonExistantTest ws
+    it "doesn't find non-existent file" $
+        nonExistentTest ws
     prop "appending list is same as mconcat" $
         propAppendConcat ws
     prop "overwriting writes after appending subset is writes" $
@@ -91,8 +91,8 @@ testStore ws =  do
 testNS :: NameSpace
 testNS = NameSpace "PONIES"
 
-nonExistantTest :: Store s => With s -> Expectation
-nonExistantTest ws = ws $ \s ->
+nonExistentTest :: Store s => With s -> Expectation
+nonExistentTest ws = ws $ \s ->
     fetchs s testNS ["wat"] >>=
         (`shouldBe` [Nothing])
 
