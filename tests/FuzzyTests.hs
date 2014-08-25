@@ -235,8 +235,8 @@ propImmutableStore (ImmutableWrites addrs writes p)
   where
      lookupAndInsert s acc addr = do
         let prod = if addr ^. bitAt 0
-            then readExtended s testNS 0 maxBound [addr]
-            else readSimple s testNS 0 maxBound  [addr]
+                    then readExtended s testNS 0 maxBound [addr]
+                    else readSimple s testNS 0 maxBound  [addr]
         bs <- P.fold mappend mempty id prod
         if S.null bs
             then error $ "Lost data at " ++ show addr

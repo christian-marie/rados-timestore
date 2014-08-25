@@ -112,7 +112,7 @@ enumerate s user_ns = do
     let s_objs = [name (SimpleBucketLocation (0, x))  | x <- buckets]
     let e_objs = [name (ExtendedBucketLocation (0, x)) | x <- buckets]
 
-    zipProducers (streamObjects s ns s_objs) (streamObjects s ns e_objs)
+    P.zip (streamObjects s ns s_objs) (streamObjects s ns e_objs)
     >-> P.map sequenceT
     >-> P.concat
     >-> P.map (uncurry processMutable)

@@ -27,7 +27,6 @@ module TimeStore.StoreHelpers
     indexEntry,
     updateLatest,
     streamObjects,
-    zipProducers,
 ) where
 
 import Control.Exception
@@ -275,28 +274,12 @@ streamObjects s ns objs = do
     m_szs <- lift (sizes s ns objs)
     let work = zipWith merge objs m_szs
     -- Now stream the objects given those sizes
-    buffered readAhead (each work)
-    >-> P.mapM (traverse . uncurry $ fetch s ns)
+    buffered readAhead
+             (each work >-> P.mapM (traverse . uncurry $ fetch s ns))
     >-> P.mapM (traverse $ reifyFetch s)
   where
     merge _ Nothing = Nothing
     merge x (Just sz) = Just (x, sz)
-
-zipProducers :: Monad m
-             => Producer a m r
-             -> Producer b m r
-             -> Producer (a,b) m r
-zipProducers pa pb = do
-    x <- lift (next pa)
-    case x of
-        Left r  -> return r
-        Right (a, ra) -> do
-            y <- lift (next pb)
-            case y of
-                Left r -> return r
-                Right (b, rb) -> do
-                    yield (a,b)
-                    zipProducers ra rb
 
 -- How many buckets to fetch-ahead, we will want roughly this much memory *
 -- average block size.

@@ -15,6 +15,7 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE TypeFamilies               #-}
 
 module TimeStore.Core
@@ -208,7 +209,7 @@ bucketLocation (Epoch epoch) (Bucket bucket) kind =
 
 newtype Bucket
     = Bucket { unBucket :: Word64 }
-  deriving (Eq, Ord, Num, Show, Enum, Real, Integral)
+  deriving (Eq, Ord, Num, Show, Enum, Real, Integral, Read)
 
 newtype LockName
     = LockName { unLockName :: ByteString }
@@ -217,6 +218,10 @@ newtype LockName
 newtype NameSpace
     = NameSpace { unNameSpace :: ByteString }
   deriving (Eq, Ord, Show)
+
+instance Read NameSpace where
+    readsPrec _ =
+        pure . (,"") . either error id . nameSpace . S.pack
 
 nameSpace :: ByteString -> Either String NameSpace
 nameSpace bs

@@ -20,6 +20,7 @@ module TimeStore
     NameSpace(unNameSpace),
     nameSpace,
     Store(..),
+    Bucket,
 
     -- * Writing
     writeEncoded,
@@ -55,7 +56,6 @@ import qualified Data.ByteString as S
 import Data.Maybe
 import Data.Tagged
 import Data.Tuple.Sequence (sequenceT)
-import Data.Word (Word64)
 import Pipes
 import qualified Pipes.Prelude as P
 import TimeStore.Algorithms
@@ -75,12 +75,12 @@ isRegistered s ns =
 registerNamespace :: Store s
                   => s
                   -> NameSpace
-                  -> Word64
+                  -> Bucket
                   -- ^ Number of simple buckets to distribute over
-                  -> Word64
+                  -> Bucket
                   -- ^ Number of extended buckets to distribute over
                   -> IO ()
-registerNamespace s ns s_buckets e_buckets = do
+registerNamespace s ns (Bucket s_buckets) (Bucket e_buckets) = do
     registered <- isRegistered s ns
     unless registered $
         append s ns [ ( name (undefined :: Tagged Simple Index)
@@ -165,7 +165,7 @@ readExtended s ns start end addrs = do
     let s_objs = targetObjs e_ix start end addrs (name . SimpleBucketLocation)
     let e_objs = targetObjs e_ix start end addrs (name . ExtendedBucketLocation)
 
-    zipProducers (streamObjects s ns s_objs) (streamObjects s ns e_objs)
+    P.zip (streamObjects s ns s_objs) (streamObjects s ns e_objs)
     >-> P.map sequenceT  -- Ensure both or neither are there.
     >-> P.concat         -- Maybe (s_bs,e_bs) -> (s_bs,e_bs.)
     >-> P.map (uncurry (processExtended start end addrs))

@@ -118,7 +118,8 @@ groupMixed :: Tagged Simple Index
                       Map (Epoch,Bucket) PointerWrite,
                       Tagged Simple Time,
                       Tagged Extended Time)
-groupMixed (Tagged s_idx) (Tagged e_idx) input = go mempty mempty mempty (Tagged 0) (Tagged 0) 0
+groupMixed (Tagged s_idx) (Tagged e_idx) input =
+    go mempty mempty mempty (Tagged 0) (Tagged 0) 0
   where
     -- Look through the input string, indexed by os.
     go !s_map !e_map !p_map !s_latest !e_latest !os
