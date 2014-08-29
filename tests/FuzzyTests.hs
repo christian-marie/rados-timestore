@@ -228,7 +228,7 @@ propImmutableStore (ImmutableWrites addrs writes p)
                    (Positive rollover) = monadicIO $ do
     res <- run $ do
         s <- memoryStore rollover
-        registerNamespace s testNS s_buckets e_buckets
+        registerNamespace s testNS (Bucket s_buckets) (Bucket e_buckets)
         mapM_ (writeEncoded s testNS) writes
         foldM (lookupAndInsert s) mempty addrs
     assert . either error (const True) $ unProposition p res
@@ -251,4 +251,3 @@ propGroupsPoints ix1 ix2 (MixedPayload x) =
     -- extended max. This is because adding an extended point will add a
     -- pointer to the simple bucket.
     in e_max <= s_max
-

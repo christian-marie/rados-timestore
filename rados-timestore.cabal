@@ -16,6 +16,10 @@ source-repository    head
   type:              git
   location:          git@github.com:anchor/rados-timestore.git
 
+flag rados
+  description: Whether to build with rados backend support.
+  default: True
+
 library
   hs-source-dirs:    lib
   default-language:  Haskell2010
@@ -26,9 +30,8 @@ library
                      TimeStore.Index,
                      TimeStore.Core,
                      TimeStore.StoreHelpers,
-                     TimeStore.Stores.Memory,
-                     TimeStore.Stores.Rados
-                     
+                     TimeStore.Stores.Memory
+
   build-depends:     base >=3 && <5,
                      bytestring,
                      packer,
@@ -44,8 +47,7 @@ library
                      pretty-hex,
                      spool,
                      tagged,
-                     containers,
-                     rados-haskell >= 3.1.0
+                     containers
 
   ghc-options:       -O2
                      -threaded
@@ -54,6 +56,12 @@ library
                      -fwarn-tabs
 
   ghc-prof-options:  -auto-all
+
+  if flag(rados)
+    CC-Options: "-DRADOS"
+    build-depends:   rados-haskell >= 3.1.0
+    other-modules:   TimeStore.Stores.Rados
+
 
 executable store
   hs-source-dirs:    src
@@ -72,7 +80,6 @@ executable store
                      -Wwarn
                      -fwarn-tabs
 
---   ghc-prof-options:  -fprof-auto
 
 test-suite           unit-tests
   hs-source-dirs:    tests, lib
@@ -97,10 +104,13 @@ test-suite           unit-tests
                      tagged,
                      containers,
                      spool,
-                     rados-timestore,
-                     rados-haskell >= 3.1.0
+                     rados-timestore
   ghc-options:       -threaded
   ghc-prof-options:  -auto-all
+
+  if flag(rados)
+    CC-Options: "-DRADOS"
+    build-depends:   rados-haskell >= 3.1.0
 
 
 test-suite           fuzzy-tests
@@ -127,10 +137,14 @@ test-suite           fuzzy-tests
                      tagged,
                      containers,
                      spool,
-                     rados-timestore,
-                     rados-haskell >= 3.1.0
+                     rados-timestore
   ghc-options:       -threaded
   ghc-prof-options:  -auto-all
+
+  if flag(rados)
+    CC-Options: "-DRADOS"
+    build-depends:   rados-haskell >= 3.1.0
+
 
 test-suite           store-tests
   hs-source-dirs:    tests, lib
@@ -156,10 +170,10 @@ test-suite           store-tests
                      tagged,
                      containers,
                      spool,
-                     rados-timestore,
-                     rados-haskell >= 3.1.0
+                     rados-timestore
   ghc-options:       -threaded
   ghc-prof-options:  -auto-all
 
-
--- vim: set tabstop=21 expandtab:
+  if flag(rados)
+    CC-Options: "-DRADOS"
+    build-depends:   rados-haskell >= 3.1.0

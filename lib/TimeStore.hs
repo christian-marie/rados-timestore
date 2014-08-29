@@ -12,6 +12,8 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+{-# OPTIONS -cpp #-}
+
 module TimeStore
 (
     -- * Types
@@ -34,11 +36,13 @@ module TimeStore
     isRegistered,
     fetchIndex,
 
+#if defined RADOS
     -- * Rados store (ceph)
     RadosStore(..),
     radosStore,
     cleanupRadosStore,
     withRadosStore,
+#endif
 
     -- * Memory store (testing)
     MemoryStore,
@@ -63,7 +67,9 @@ import TimeStore.Core
 import TimeStore.Index
 import TimeStore.StoreHelpers
 import TimeStore.Stores.Memory
+#if defined RADOS
 import TimeStore.Stores.Rados
+#endif
 
 -- | Check if a namespace is registered.
 isRegistered :: Store s => s -> NameSpace -> IO Bool
