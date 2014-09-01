@@ -13,26 +13,25 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS -cpp #-}
 
-import           Control.Applicative
-import           Control.Concurrent (threadDelay)
-import           Control.Concurrent.Async
-import           Control.Monad
-import           Data.ByteString (ByteString)
+import Control.Applicative
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async
+import Control.Monad
+import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
-import           Data.Function
-import           Data.List
-import           Data.Monoid
+import Data.Function
+import Data.List
+import Data.Monoid
 #if defined RADOS
 import qualified System.Rados.Monadic as R
 #endif
-import           Test.Hspec
-import           Test.Hspec.Core (SpecM)
-import           Test.Hspec.QuickCheck
-import           Test.QuickCheck hiding (reason, theException)
-import           Test.QuickCheck.Monadic
-
-import           TimeStore
-import           TimeStore.Core
+import Test.Hspec
+import Test.Hspec.Core (SpecM)
+import Test.Hspec.QuickCheck
+import Test.QuickCheck hiding (reason, theException)
+import Test.QuickCheck.Monadic
+import TimeStore
+import TimeStore.Core
 
 newtype ValidBS
     = ValidBS { unValidBS :: ByteString }
