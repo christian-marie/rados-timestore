@@ -11,6 +11,7 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS -cpp #-}
 
 import Control.Applicative
 import Control.Concurrent (threadDelay)
@@ -21,7 +22,9 @@ import qualified Data.ByteString.Char8 as S
 import Data.Function
 import Data.List
 import Data.Monoid
+#if defined RADOS
 import qualified System.Rados.Monadic as R
+#endif
 import Test.Hspec
 import Test.Hspec.Core (SpecM)
 import Test.Hspec.QuickCheck
@@ -54,6 +57,7 @@ instance Arbitrary ByteString where
 
 type With x = forall a. (x -> IO a) -> IO a
 
+#if defined RADOS
 cephConf :: FilePath
 cephConf = "/etc/ceph/ceph.conf"
 
@@ -62,16 +66,18 @@ withTestRadosStore :: (RadosStore -> IO a) -> IO a
 withTestRadosStore f = do
     R.runConnect Nothing (R.parseConfig cephConf) . R.runPool "test" $
         R.unsafeObjects >>= mapM_ (`R.runObject` R.remove)
-
     withRadosStore Nothing cephConf "test" 64  f
+#endif
 
 main :: IO ()
 main =
     hspec $ do
         describe "memory store" $
             testStore (memoryStore 64 >>=)
+#if defined RADOS
         describe "rados store" $
             testStore withTestRadosStore
+#endif
 
 testStore :: Store s => With s -> SpecM ()
 testStore ws =  do

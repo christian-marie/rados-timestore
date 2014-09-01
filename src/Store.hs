@@ -7,9 +7,16 @@
 -- the 3-clause BSD licence.
 --
 
+{-# OPTIONS -cpp #-}
+
 module Main where
-import qualified Data.ByteString.Char8 as S
+
 import Options.Applicative
+
+#if defined RADOS
+import qualified Data.ByteString.Char8 as S
+#endif
+
 import TimeStore
 
 data Options
@@ -79,6 +86,7 @@ registerActionParser = Register <$> parseSimpleBuckets
 
 main :: IO ()
 main = do
+#if defined RADOS
     Options pool user ns cmd <- execParser helpfulParser
 
     case cmd of
@@ -91,3 +99,6 @@ main = do
             if registered
                 then putStrLn "Origin already registered"
                 else registerNamespace s ns s_buckets e_buckets
+#else
+    putStrLn "No CEPH"
+#endif
