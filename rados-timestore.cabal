@@ -58,7 +58,7 @@ library
   ghc-prof-options:  -auto-all
 
   if flag(rados)
-    CC-Options: "-DRADOS"
+    cpp-options:     -DRADOS
     build-depends:   rados-haskell >= 3.1.0
     other-modules:   TimeStore.Stores.Rados
 
@@ -108,11 +108,6 @@ test-suite           unit-tests
   ghc-options:       -threaded
   ghc-prof-options:  -auto-all
 
-  if flag(rados)
-    CC-Options: "-DRADOS"
-    build-depends:   rados-haskell >= 3.1.0
-
-
 test-suite           fuzzy-tests
   hs-source-dirs:    tests, lib
   main-is:           FuzzyTests.hs
@@ -140,11 +135,6 @@ test-suite           fuzzy-tests
                      rados-timestore
   ghc-options:       -threaded
   ghc-prof-options:  -auto-all
-
-  if flag(rados)
-    CC-Options: "-DRADOS"
-    build-depends:   rados-haskell >= 3.1.0
-
 
 test-suite           store-tests
   hs-source-dirs:    tests, lib
@@ -175,5 +165,5 @@ test-suite           store-tests
   ghc-prof-options:  -auto-all
 
   if flag(rados)
-    CC-Options: "-DRADOS"
+    cpp-options: -DRADOS
     build-depends:   rados-haskell >= 3.1.0

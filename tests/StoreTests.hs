@@ -7,11 +7,12 @@
 -- the 3-clause BSD licence.
 --
 
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# OPTIONS -cpp #-}
+{-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
 
 import Control.Applicative
 import Control.Concurrent (threadDelay)
@@ -22,7 +23,7 @@ import qualified Data.ByteString.Char8 as S
 import Data.Function
 import Data.List
 import Data.Monoid
-#if defined RADOS
+#if defined(RADOS)
 import qualified System.Rados.Monadic as R
 #endif
 import Test.Hspec
@@ -57,7 +58,7 @@ instance Arbitrary ByteString where
 
 type With x = forall a. (x -> IO a) -> IO a
 
-#if defined RADOS
+#if defined(RADOS)
 cephConf :: FilePath
 cephConf = "/etc/ceph/ceph.conf"
 
@@ -74,7 +75,7 @@ main =
     hspec $ do
         describe "memory store" $
             testStore (memoryStore 64 >>=)
-#if defined RADOS
+#if defined(RADOS)
         describe "rados store" $
             testStore withTestRadosStore
 #endif

@@ -7,13 +7,13 @@
 -- the 3-clause BSD licence.
 --
 
-{-# OPTIONS -cpp #-}
+{-# LANGUAGE CPP #-}
 
 module Main where
 
 import Options.Applicative
 
-#if defined RADOS
+#if defined(RADOS)
 import qualified Data.ByteString.Char8 as S
 #endif
 
@@ -85,20 +85,21 @@ registerActionParser = Register <$> parseSimpleBuckets
         <> help "Number of extended buckets"
 
 main :: IO ()
-main = do
-#if defined RADOS
-    Options pool user ns cmd <- execParser helpfulParser
+main =
+#if defined(RADOS)
+    do
+        Options pool user ns cmd <- execParser helpfulParser
 
-    case cmd of
-        Register s_buckets e_buckets -> do
-            s <- radosStore (fmap S.pack user)
-                            "/etc/ceph/ceph.conf"
-                            (S.pack pool)
-                            0
-            registered <- isRegistered s ns
-            if registered
-                then putStrLn "Origin already registered"
-                else registerNamespace s ns s_buckets e_buckets
+        case cmd of
+            Register s_buckets e_buckets -> do
+                s <- radosStore (fmap S.pack user)
+                                "/etc/ceph/ceph.conf"
+                                (S.pack pool)
+                                0
+                registered <- isRegistered s ns
+                if registered
+                    then putStrLn "Origin already registered"
+                    else registerNamespace s ns s_buckets e_buckets
 #else
     putStrLn "No CEPH"
 #endif

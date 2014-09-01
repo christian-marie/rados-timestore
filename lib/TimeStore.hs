@@ -7,12 +7,11 @@
 -- the 3-clause BSD licence.
 --
 
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE OverloadedLists     #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-
-{-# OPTIONS -cpp #-}
 
 module TimeStore
 (
@@ -36,7 +35,7 @@ module TimeStore
     isRegistered,
     fetchIndex,
 
-#if defined RADOS
+#if defined(RADOS)
     -- * Rados store (ceph)
     RadosStore(..),
     radosStore,
@@ -67,7 +66,7 @@ import TimeStore.Core
 import TimeStore.Index
 import TimeStore.StoreHelpers
 import TimeStore.Stores.Memory
-#if defined RADOS
+#if defined(RADOS)
 import TimeStore.Stores.Rados
 #endif
 

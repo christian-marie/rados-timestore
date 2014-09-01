@@ -11,7 +11,7 @@ tags: $(SOURCES)
 	-$(CTAGS) $^ > tags $(REDIRECT)
 
 format: $(SOURCES)
-	stylish-haskell -i $^
+	for i in $^; do stylish-haskell -i $$i; done
 
 lint: $(SOURCES)
 	for i in $^; do hlint $$i; done
