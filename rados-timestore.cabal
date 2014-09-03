@@ -62,7 +62,6 @@ library
     build-depends:   rados-haskell >= 3.1.0
     other-modules:   TimeStore.Stores.Rados
 
-
 executable store
   hs-source-dirs:    src
   main-is:           Store.hs
@@ -70,7 +69,7 @@ executable store
 
   build-depends:     base >=3 && <5,
                      bytestring,
-                     optparse-applicative,
+                     optparse-applicative >= 0.10,
                      directory,
                      rados-timestore
 
@@ -80,6 +79,9 @@ executable store
                      -Wwarn
                      -fwarn-tabs
 
+  if flag(rados)
+    cpp-options: -DRADOS
+    build-depends:   rados-haskell >= 3.1.0
 
 test-suite           unit-tests
   hs-source-dirs:    tests, lib

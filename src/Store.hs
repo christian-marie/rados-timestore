@@ -52,7 +52,7 @@ optionsParser = Options <$> parsePool
         <> metavar "USER"
         <> help "Ceph user for access to storage"
 
-    parseNS = option $
+    parseNS = option auto $
         long "origin"
         <> short 'o'
         <> help "Origin (namespace)"
@@ -60,7 +60,7 @@ optionsParser = Options <$> parsePool
     parseAction = subparser parseRegisterAction
 
     parseRegisterAction =
-        componentHelper "register" registerActionParser "Register an "
+        componentHelper "register" registerActionParser "Register a namespace (origin)"
 
     componentHelper cmd_name parser desc =
         command cmd_name (info (helper <*> parser) (progDesc desc))
@@ -70,14 +70,14 @@ registerActionParser :: Parser Action
 registerActionParser = Register <$> parseSimpleBuckets
                                 <*> parseExtendedBuckets
   where
-    parseSimpleBuckets = option $
+    parseSimpleBuckets = option auto $
         long "simple_buckets"
         <> short 's'
         <> value 0
         <> showDefault
         <> help "Number of simple buckets"
 
-    parseExtendedBuckets = option $
+    parseExtendedBuckets = option auto $
         long "extendend_buckets"
         <> short 'e'
         <> value 0
